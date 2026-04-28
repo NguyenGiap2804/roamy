@@ -21,9 +21,13 @@ export function validate<T extends ZodType>(schema: T) {
       query?: Request['query'];
     };
 
-    req.body = data.body ?? req.body;
-    req.params = data.params ?? req.params;
-    req.query = data.query ?? req.query;
+    if (data.body !== undefined) req.body = data.body;
+    if (data.params !== undefined) {
+      Object.defineProperty(req, 'params', { value: data.params, writable: true, enumerable: true, configurable: true });
+    }
+    if (data.query !== undefined) {
+      Object.defineProperty(req, 'query', { value: data.query, writable: true, enumerable: true, configurable: true });
+    }
     return next();
   };
 }
