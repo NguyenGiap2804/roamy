@@ -79,6 +79,10 @@ class Place {
   }
 
   String get category => categoryName ?? 'Other';
+  bool get hasPriceRange => priceRange.trim().isNotEmpty;
+  bool get hasOpeningHours => openingHours.trim().isNotEmpty;
+  bool get hasPhone => phone?.trim().isNotEmpty == true;
+  bool get hasMapsUrl => mapsUrl?.trim().isNotEmpty == true;
   String get safePhone => phone?.isNotEmpty == true ? phone! : 'Not added yet';
   String get safeMapsUrl =>
       mapsUrl?.isNotEmpty == true ? mapsUrl! : 'Not added yet';

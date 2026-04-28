@@ -19,15 +19,25 @@ export class PlaceRepository {
 
   create(data: PlaceCreateInput) {
     return prisma.place.create({
-      data,
+      data: {
+        ...data,
+        priceRange: data.priceRange ?? '',
+        openingHours: data.openingHours ?? '',
+      },
       include: { category: true },
     });
   }
 
   update(id: string, data: PlaceUpdateInput) {
+    const normalizedData = {
+      ...data,
+      priceRange: data.priceRange === null ? '' : data.priceRange,
+      openingHours: data.openingHours === null ? '' : data.openingHours,
+    };
+
     return prisma.place.update({
       where: { id },
-      data,
+      data: normalizedData,
       include: { category: true },
     });
   }

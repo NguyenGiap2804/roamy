@@ -1,11 +1,13 @@
-import 'dart:io';
+// ignore_for_file: avoid_print
+
 import 'package:http/http.dart' as http;
 
 void main() async {
   String url = 'https://maps.app.goo.gl/vtyp87TxY2ShPR6v5';
   var finalUrl = url;
   var client = http.Client();
-  var request = http.Request('GET', Uri.parse(finalUrl))..followRedirects = false;
+  var request = http.Request('GET', Uri.parse(finalUrl))
+    ..followRedirects = false;
   var response = await client.send(request);
 
   for (var index = 0; index < 10; index++) {
@@ -17,9 +19,9 @@ void main() async {
     request = http.Request('GET', Uri.parse(finalUrl))..followRedirects = false;
     response = await client.send(request);
   }
-  
+
   print('Final URL: $finalUrl');
-  
+
   final uri = Uri.parse(finalUrl);
   final pathSegments = uri.pathSegments;
 

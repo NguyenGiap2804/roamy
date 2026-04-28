@@ -1,14 +1,16 @@
+// ignore_for_file: avoid_print
+
 import 'dart:io';
 
 void main() async {
   final url = 'https://maps.app.goo.gl/vtyp87TxY2ShPR6v5';
   final client = HttpClient();
-  
+
   var finalUrl = url;
   var request = await client.getUrl(Uri.parse(finalUrl));
   request.followRedirects = false;
   var response = await request.close();
-  
+
   for (var i = 0; i < 10; i++) {
     if (response.isRedirect) {
       final location = response.headers.value('location');
@@ -22,6 +24,6 @@ void main() async {
       break;
     }
   }
-  
+
   print('Final URL: $finalUrl');
 }

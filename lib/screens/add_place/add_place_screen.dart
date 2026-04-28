@@ -11,6 +11,7 @@ import '../../core/constants/app_text_styles.dart';
 import '../../core/network/api_endpoints.dart';
 import '../../providers/category_provider.dart';
 import '../../providers/place_provider.dart';
+import '../../services/google_maps_extraction_service.dart';
 import '../../widgets/primary_button.dart';
 
 class AddPlaceScreen extends StatefulWidget {
@@ -32,98 +33,15 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
   final _imageUrlController = TextEditingController();
 
   final ImagePicker _picker = ImagePicker();
+  final GoogleMapsExtractionService _mapsExtractionService =
+      GoogleMapsExtractionService();
   File? _selectedImage;
   String? _selectedCategoryId;
-  double _rating = 4.5;
+  final double _rating = 4.5;
   bool _isSaving = false;
   bool _isAutoFilling = false;
   double? _latitude;
   double? _longitude;
-
-  bool _tryExtractPlaceData(Uri uri) {
-    var foundData = false;
-    final pathSegments = uri.pathSegments;
-
-    if (pathSegments.contains('place')) {
-      final placeIndex = pathSegments.indexOf('place');
-      if (placeIndex + 1 < pathSegments.length) {
-        final decodedName = Uri.decodeComponent(
-          pathSegments[placeIndex + 1],
-        ).replaceAll('+', ' ');
-        if (_nameController.text.isEmpty) {
-          _nameController.text = decodedName;
-        }
-        foundData = true;
-      }
-    }
-
-    for (final segment in pathSegments) {
-      if (segment.startsWith('@')) {
-        final parts = segment.substring(1).split(',');
-        if (parts.length >= 2) {
-          final latitude = double.tryParse(parts[0]);
-          final longitude = double.tryParse(parts[1]);
-          if (latitude != null && longitude != null) {
-            _latitude = latitude;
-            _longitude = longitude;
-            foundData = true;
-          }
-        }
-      }
-    }
-
-    final queryCandidates = <String?>[
-      uri.queryParameters['q'],
-      uri.queryParameters['query'],
-      uri.queryParameters['destination'],
-      uri.queryParameters['daddr'],
-    ];
-
-    for (final candidate in queryCandidates) {
-      if (candidate == null || candidate.isEmpty) continue;
-
-      final coordinateMatch = RegExp(
-        r'(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)',
-      ).firstMatch(candidate);
-
-      if (coordinateMatch != null) {
-        final latitude = double.tryParse(coordinateMatch.group(1)!);
-        final longitude = double.tryParse(coordinateMatch.group(2)!);
-        if (latitude != null && longitude != null) {
-          _latitude = latitude;
-          _longitude = longitude;
-          foundData = true;
-        }
-      }
-
-      if (_nameController.text.isEmpty) {
-        final cleanedName = candidate
-            .replaceAll('+', ' ')
-            .replaceAll(RegExp(r'\s+'), ' ')
-            .trim();
-        if (cleanedName.isNotEmpty && !cleanedName.contains(',')) {
-          _nameController.text = cleanedName;
-          foundData = true;
-        }
-      }
-    }
-
-    return foundData;
-  }
-
-  bool _tryExtractPlaceDataFromBody(String body) {
-    final mapUrlMatch = RegExp(
-      'https?:\\/\\/(?:www\\.)?google\\.[^\\"\'\\s<>]+\\/maps\\/[^\\\"\'\\s<>]+',
-      caseSensitive: false,
-    ).firstMatch(body);
-
-    if (mapUrlMatch != null) {
-      final extractedUrl = mapUrlMatch.group(0)!.replaceAll('&amp;', '&');
-      return _tryExtractPlaceData(Uri.parse(extractedUrl));
-    }
-
-    return false;
-  }
 
   @override
   void initState() {
@@ -222,68 +140,24 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
   Future<void> _autoFillFromMapsUrl() async {
     var url = _mapsUrlController.text.trim();
     if (url.isEmpty) return;
-    if (url.contains('ps.app.goo.gl')) {
-      url = url.replaceAll('ps.app.goo.gl', 'maps.app.goo.gl');
-      _mapsUrlController.text = url; // Update UI as well
+    if (RegExp(r'(^|//)ps\.app\.goo\.gl').hasMatch(url)) {
+      url = url.replaceFirst('ps.app.goo.gl', 'maps.app.goo.gl');
+      _mapsUrlController.text = url;
     }
     if (!url.startsWith('http')) url = 'https://$url';
 
     setState(() => _isAutoFilling = true);
-    final client = http.Client();
 
     try {
-      var finalUrl = url;
-      var foundData = _tryExtractPlaceData(Uri.parse(finalUrl));
-      var request = http.Request('GET', Uri.parse(finalUrl))
-        ..followRedirects = false
-        ..headers['Cookie'] = 'CONSENT=YES+cb.20230101-11-p0.en+FX+113;';
-      var response = await client.send(request);
-
-      for (var index = 0; index < 10; index++) {
-        if (foundData) break;
-
-        if (!response.isRedirect) {
-          if (response.statusCode == 200) {
-            final bodyBytes = await response.stream.toBytes();
-            final body = utf8.decode(bodyBytes, allowMalformed: true);
-            foundData = _tryExtractPlaceDataFromBody(body) || foundData;
-            final metaRefreshRegex = RegExp(
-              r'''url=([^"' >]+)''',
-              caseSensitive: false,
-            );
-            final match = metaRefreshRegex.firstMatch(body);
-            if (match != null && match.groupCount >= 1) {
-              var newUrl = match.group(1)!;
-              newUrl = newUrl.replaceAll('&amp;', '&');
-              finalUrl = Uri.parse(finalUrl).resolve(newUrl).toString();
-              foundData = _tryExtractPlaceData(Uri.parse(finalUrl));
-              request = http.Request('GET', Uri.parse(finalUrl))
-                ..followRedirects = false
-                ..headers['Cookie'] =
-                    'CONSENT=YES+cb.20230101-11-p0.en+FX+113;';
-              response = await client.send(request);
-              continue;
-            }
-          }
-          break;
-        }
-        final location = response.headers['location'];
-        if (location != null) {
-          finalUrl = Uri.parse(finalUrl).resolve(location).toString();
-          foundData = _tryExtractPlaceData(Uri.parse(finalUrl));
-        }
-        request = http.Request('GET', Uri.parse(finalUrl))
-          ..followRedirects = false
-          ..headers['Cookie'] = 'CONSENT=YES+cb.20230101-11-p0.en+FX+113;';
-        response = await client.send(request);
-      }
+      final placeData = await _mapsExtractionService.extract(url);
 
       if (!mounted) return;
 
-      if (foundData) {
+      if (placeData.hasAnyData) {
+        setState(() => _applyExtractedPlaceData(placeData));
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Tự động điền tên và tọa độ thành công'),
+            content: Text('Đã tự động điền thông tin từ Google Maps'),
           ),
         );
       } else {
@@ -299,9 +173,24 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
         const SnackBar(content: Text('Lỗi trích xuất link Google Maps')),
       );
     } finally {
-      client.close();
       if (mounted) setState(() => _isAutoFilling = false);
     }
+  }
+
+  void _applyExtractedPlaceData(GoogleMapsPlaceData data) {
+    _setTextIfEmpty(_nameController, data.name);
+    _setTextIfEmpty(_addressController, data.address);
+    _setTextIfEmpty(_priceRangeController, data.priceRange);
+    _setTextIfEmpty(_openingHoursController, data.openingHours);
+    _setTextIfEmpty(_phoneController, data.phone);
+    _latitude = data.latitude ?? _latitude;
+    _longitude = data.longitude ?? _longitude;
+  }
+
+  void _setTextIfEmpty(TextEditingController controller, String? value) {
+    if (controller.text.trim().isNotEmpty) return;
+    if (value == null || value.trim().isEmpty) return;
+    controller.text = value.trim();
   }
 
   Future<void> _save() async {
@@ -340,8 +229,8 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
         'name': _nameController.text.trim(),
         'categoryId': categoryId,
         'address': _addressController.text.trim(),
-        'priceRange': _priceRangeController.text.trim(),
-        'openingHours': _openingHoursController.text.trim(),
+        'priceRange': _nullableText(_priceRangeController),
+        'openingHours': _nullableText(_openingHoursController),
         'phone': _nullableText(_phoneController),
         'mapsUrl': _nullableText(_mapsUrlController),
         'note': _nullableText(_noteController),
@@ -482,11 +371,13 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                     controller: _priceRangeController,
                     label: 'Price range',
                     icon: Icons.payments_rounded,
+                    requiredField: false,
                   ),
                   _Input(
                     controller: _openingHoursController,
                     label: 'Opening hours',
                     icon: Icons.schedule_rounded,
+                    requiredField: false,
                   ),
                   _Input(
                     controller: _phoneController,

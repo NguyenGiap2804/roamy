@@ -158,11 +158,12 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                       const SizedBox(height: 12),
                       _InfoCard(
                         children: [
-                          _InfoRow(
-                            icon: Icons.payments_rounded,
-                            title: 'Price range',
-                            value: place.priceRange,
-                          ),
+                          if (place.hasPriceRange)
+                            _InfoRow(
+                              icon: Icons.payments_rounded,
+                              title: 'Price range',
+                              value: place.priceRange,
+                            ),
                           _InfoRow(
                             icon: Icons.location_on_rounded,
                             title: 'Address',
@@ -170,31 +171,38 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 22),
-                      const SectionTitle(
-                        title: 'Visit information',
-                        icon: Icons.schedule_rounded,
-                      ),
-                      const SizedBox(height: 12),
-                      _InfoCard(
-                        children: [
-                          _InfoRow(
-                            icon: Icons.access_time_rounded,
-                            title: 'Opening hours',
-                            value: place.openingHours,
-                          ),
-                          _InfoRow(
-                            icon: Icons.phone_rounded,
-                            title: 'Phone',
-                            value: place.safePhone,
-                          ),
-                          _InfoRow(
-                            icon: Icons.map_rounded,
-                            title: 'Google Maps',
-                            value: place.safeMapsUrl,
-                          ),
-                        ],
-                      ),
+                      if (place.hasOpeningHours ||
+                          place.hasPhone ||
+                          place.hasMapsUrl) ...[
+                        const SizedBox(height: 22),
+                        const SectionTitle(
+                          title: 'Visit information',
+                          icon: Icons.schedule_rounded,
+                        ),
+                        const SizedBox(height: 12),
+                        _InfoCard(
+                          children: [
+                            if (place.hasOpeningHours)
+                              _InfoRow(
+                                icon: Icons.access_time_rounded,
+                                title: 'Opening hours',
+                                value: place.openingHours,
+                              ),
+                            if (place.hasPhone)
+                              _InfoRow(
+                                icon: Icons.phone_rounded,
+                                title: 'Phone',
+                                value: place.safePhone,
+                              ),
+                            if (place.hasMapsUrl)
+                              _InfoRow(
+                                icon: Icons.map_rounded,
+                                title: 'Google Maps',
+                                value: place.safeMapsUrl,
+                              ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 22),
                       const SectionTitle(
                         title: 'Personal note',
