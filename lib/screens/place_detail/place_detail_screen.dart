@@ -233,14 +233,14 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                         icon: Icons.map_rounded,
                         onPressed: () async {
                           Uri? uri;
-                          if (place.latitude != null &&
+                          if (place.mapsUrl != null &&
+                              place.mapsUrl!.isNotEmpty) {
+                            uri = Uri.parse(place.mapsUrl!);
+                          } else if (place.latitude != null &&
                               place.longitude != null) {
                             uri = Uri.parse(
                               'https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}',
                             );
-                          } else if (place.mapsUrl != null &&
-                              place.mapsUrl!.isNotEmpty) {
-                            uri = Uri.parse(place.mapsUrl!);
                           }
 
                           if (uri != null) {
