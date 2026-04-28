@@ -40,6 +40,91 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
   double? _latitude;
   double? _longitude;
 
+  bool _tryExtractPlaceData(Uri uri) {
+    var foundData = false;
+    final pathSegments = uri.pathSegments;
+
+    if (pathSegments.contains('place')) {
+      final placeIndex = pathSegments.indexOf('place');
+      if (placeIndex + 1 < pathSegments.length) {
+        final decodedName = Uri.decodeComponent(
+          pathSegments[placeIndex + 1],
+        ).replaceAll('+', ' ');
+        if (_nameController.text.isEmpty) {
+          _nameController.text = decodedName;
+        }
+        foundData = true;
+      }
+    }
+
+    for (final segment in pathSegments) {
+      if (segment.startsWith('@')) {
+        final parts = segment.substring(1).split(',');
+        if (parts.length >= 2) {
+          final latitude = double.tryParse(parts[0]);
+          final longitude = double.tryParse(parts[1]);
+          if (latitude != null && longitude != null) {
+            _latitude = latitude;
+            _longitude = longitude;
+            foundData = true;
+          }
+        }
+      }
+    }
+
+    final queryCandidates = <String?>[
+      uri.queryParameters['q'],
+      uri.queryParameters['query'],
+      uri.queryParameters['destination'],
+      uri.queryParameters['daddr'],
+    ];
+
+    for (final candidate in queryCandidates) {
+      if (candidate == null || candidate.isEmpty) continue;
+
+      final coordinateMatch = RegExp(
+        r'(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)',
+      ).firstMatch(candidate);
+
+      if (coordinateMatch != null) {
+        final latitude = double.tryParse(coordinateMatch.group(1)!);
+        final longitude = double.tryParse(coordinateMatch.group(2)!);
+        if (latitude != null && longitude != null) {
+          _latitude = latitude;
+          _longitude = longitude;
+          foundData = true;
+        }
+      }
+
+      if (_nameController.text.isEmpty) {
+        final cleanedName = candidate
+            .replaceAll('+', ' ')
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim();
+        if (cleanedName.isNotEmpty && !cleanedName.contains(',')) {
+          _nameController.text = cleanedName;
+          foundData = true;
+        }
+      }
+    }
+
+    return foundData;
+  }
+
+  bool _tryExtractPlaceDataFromBody(String body) {
+    final mapUrlMatch = RegExp(
+      'https?:\\/\\/(?:www\\.)?google\\.[^\\"\'\\s<>]+\\/maps\\/[^\\\"\'\\s<>]+',
+      caseSensitive: false,
+    ).firstMatch(body);
+
+    if (mapUrlMatch != null) {
+      final extractedUrl = mapUrlMatch.group(0)!.replaceAll('&amp;', '&');
+      return _tryExtractPlaceData(Uri.parse(extractedUrl));
+    }
+
+    return false;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -148,25 +233,34 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
 
     try {
       var finalUrl = url;
+      var foundData = _tryExtractPlaceData(Uri.parse(finalUrl));
       var request = http.Request('GET', Uri.parse(finalUrl))
         ..followRedirects = false
         ..headers['Cookie'] = 'CONSENT=YES+cb.20230101-11-p0.en+FX+113;';
       var response = await client.send(request);
 
       for (var index = 0; index < 10; index++) {
+        if (foundData) break;
+
         if (!response.isRedirect) {
           if (response.statusCode == 200) {
             final bodyBytes = await response.stream.toBytes();
             final body = utf8.decode(bodyBytes, allowMalformed: true);
-            final RegExp metaRefreshRegex = RegExp(r'''url=([^"' >]+)''', caseSensitive: false);
+            foundData = _tryExtractPlaceDataFromBody(body) || foundData;
+            final metaRefreshRegex = RegExp(
+              r'''url=([^"' >]+)''',
+              caseSensitive: false,
+            );
             final match = metaRefreshRegex.firstMatch(body);
             if (match != null && match.groupCount >= 1) {
               var newUrl = match.group(1)!;
               newUrl = newUrl.replaceAll('&amp;', '&');
               finalUrl = Uri.parse(finalUrl).resolve(newUrl).toString();
+              foundData = _tryExtractPlaceData(Uri.parse(finalUrl));
               request = http.Request('GET', Uri.parse(finalUrl))
                 ..followRedirects = false
-                ..headers['Cookie'] = 'CONSENT=YES+cb.20230101-11-p0.en+FX+113;';
+                ..headers['Cookie'] =
+                    'CONSENT=YES+cb.20230101-11-p0.en+FX+113;';
               response = await client.send(request);
               continue;
             }
@@ -176,6 +270,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
         final location = response.headers['location'];
         if (location != null) {
           finalUrl = Uri.parse(finalUrl).resolve(location).toString();
+          foundData = _tryExtractPlaceData(Uri.parse(finalUrl));
         }
         request = http.Request('GET', Uri.parse(finalUrl))
           ..followRedirects = false
@@ -183,42 +278,19 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
         response = await client.send(request);
       }
 
-      final uri = Uri.parse(finalUrl);
-      final pathSegments = uri.pathSegments;
-
-      bool foundData = false;
-
-      if (pathSegments.contains('place')) {
-        final placeIndex = pathSegments.indexOf('place');
-        if (placeIndex + 1 < pathSegments.length) {
-          final decodedName = pathSegments[placeIndex + 1].replaceAll('+', ' ');
-          if (_nameController.text.isEmpty) {
-            _nameController.text = decodedName;
-          }
-          foundData = true;
-        }
-      }
-
-      for (final segment in pathSegments) {
-        if (segment.startsWith('@')) {
-          final parts = segment.substring(1).split(',');
-          if (parts.length >= 2) {
-            _latitude = double.tryParse(parts[0]);
-            _longitude = double.tryParse(parts[1]);
-            foundData = true;
-          }
-        }
-      }
-
       if (!mounted) return;
-      
+
       if (foundData) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tự động điền tên và tọa độ thành công')),
+          const SnackBar(
+            content: Text('Tự động điền tên và tọa độ thành công'),
+          ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Không tìm thấy thông tin trong link này')),
+          const SnackBar(
+            content: Text('Không tìm thấy thông tin trong link này'),
+          ),
         );
       }
     } catch (_) {
