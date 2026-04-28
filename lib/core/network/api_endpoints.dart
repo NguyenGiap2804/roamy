@@ -7,13 +7,7 @@ class ApiEndpoints {
     const envUrl = String.fromEnvironment('API_BASE_URL');
     if (envUrl.isNotEmpty) return envUrl;
 
-    try {
-      if (Platform.isAndroid) {
-        return 'http://10.0.2.2:4000/api/v1';
-      }
-    } catch (_) {}
-
-    return 'http://localhost:4000/api/v1';
+    return 'https://roamy-production.up.railway.app/api/v1';
   }
 
   static const categories = '/categories';
