@@ -6,8 +6,8 @@ const port = Number(process.env.PORT ?? 4000);
 async function bootstrap() {
   await connectDb();
 
-  const server = app.listen(port, () => {
-    console.log(`Roamy Backend running at http://localhost:${port}`);
+  const server = app.listen(port, '0.0.0.0', () => {
+    console.log(`Roamy Backend running at http://0.0.0.0:${port}`);
   });
 
   const shutdown = async () => {
