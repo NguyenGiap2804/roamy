@@ -2,12 +2,12 @@
   "name": "roamy-backend",
   "version": "1.0.0",
   "description": "Roamy Backend API",
-  "main": "dist/server.js",
+  "main": "dist/src/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "prisma generate && tsc",
-    "start": "node dist/server.js",
-    "deploy:start": "prisma migrate deploy && node dist/server.js",
+    "start": "node dist/src/server.js",
+    "deploy:start": "prisma migrate deploy && node dist/src/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "seed": "tsx prisma/seed.ts"
