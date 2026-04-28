@@ -169,9 +169,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
       if (pathSegments.contains('place')) {
         final placeIndex = pathSegments.indexOf('place');
         if (placeIndex + 1 < pathSegments.length) {
-          final decodedName = Uri.decodeComponent(
-            pathSegments[placeIndex + 1],
-          ).replaceAll('+', ' ');
+          final decodedName = pathSegments[placeIndex + 1].replaceAll('+', ' ');
           if (_nameController.text.isEmpty) {
             _nameController.text = decodedName;
           }
