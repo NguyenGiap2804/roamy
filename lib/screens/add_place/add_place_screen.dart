@@ -137,6 +137,10 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
   Future<void> _autoFillFromMapsUrl() async {
     var url = _mapsUrlController.text.trim();
     if (url.isEmpty) return;
+    if (url.contains('ps.app.goo.gl')) {
+      url = url.replaceAll('ps.app.goo.gl', 'maps.app.goo.gl');
+      _mapsUrlController.text = url; // Update UI as well
+    }
     if (!url.startsWith('http')) url = 'https://$url';
 
     setState(() => _isAutoFilling = true);
