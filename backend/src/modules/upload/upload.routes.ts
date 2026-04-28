@@ -28,6 +28,7 @@ uploadRoutes.post('/', upload.single('image'), async (req, res) => {
 
     return sendResponse(res, 200, 'Image uploaded successfully', { url });
   } catch (error) {
-    return sendResponse(res, 500, 'Upload failed');
+    console.error('Upload error:', error);
+    return sendResponse(res, 500, `Upload failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 });
