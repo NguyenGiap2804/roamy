@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  icon      String
+  createdAt DateTime @default(now())
+  places    Place[]
+}
+
+model Place {
+  id           String     @id @default(uuid())
+  name         String
+  categoryId   String
+  category     Category   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  address      String
+  priceRange   String
+  openingHours String
+  phone        String?
+  mapsUrl      String?
+  note         String?
+  imageUrl     String?
+  rating       Float
+  hasReminder  Boolean    @default(false)
+  latitude     Float?
+  longitude    Float?
+  createdAt    DateTime   @default(now())
+  schedules    Schedule[]
+
+  @@index([categoryId])
+}
+
+model Schedule {
+  id          String         @id @default(uuid())
+  placeId     String
+  place       Place          @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  date        DateTime       @db.Date
+  time        String
+  status      ScheduleStatus @default(UPCOMING)
+  hasReminder Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+
+  @@index([placeId])
+  @@index([date])
+}
+
+enum ScheduleStatus {
+  UPCOMING
+  DONE
+  CANCELLED
+}
