@@ -135,8 +135,9 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
   }
 
   Future<void> _autoFillFromMapsUrl() async {
-    final url = _mapsUrlController.text.trim();
-    if (url.isEmpty || !url.startsWith('http')) return;
+    var url = _mapsUrlController.text.trim();
+    if (url.isEmpty) return;
+    if (!url.startsWith('http')) url = 'https://$url';
 
     setState(() => _isAutoFilling = true);
     final client = http.Client();
@@ -147,9 +148,12 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
         ..followRedirects = false;
       var response = await client.send(request);
 
-      for (var index = 0; index < 5; index++) {
+      for (var index = 0; index < 10; index++) {
         if (!response.isRedirect) break;
-        finalUrl = response.headers['location'] ?? finalUrl;
+        final location = response.headers['location'];
+        if (location != null) {
+          finalUrl = Uri.parse(finalUrl).resolve(location).toString();
+        }
         request = http.Request('GET', Uri.parse(finalUrl))
           ..followRedirects = false;
         response = await client.send(request);
@@ -459,20 +463,6 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                     icon: Icons.edit_note_rounded,
                     maxLines: 4,
                     requiredField: false,
-                  ),
-                  Text(
-                    'Rating: ${_rating.toStringAsFixed(1)}',
-                    style: AppTextStyles.body.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  Slider(
-                    value: _rating,
-                    min: 1,
-                    max: 5,
-                    divisions: 8,
-                    label: _rating.toStringAsFixed(1),
-                    onChanged: (value) => setState(() => _rating = value),
                   ),
                   const SizedBox(height: 18),
                   if (categoryProvider.errorMessage != null)

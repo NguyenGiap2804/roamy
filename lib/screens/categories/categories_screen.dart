@@ -25,6 +25,49 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     });
   }
 
+  void _showAddCategoryDialog(BuildContext context) {
+    final controller = TextEditingController();
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Thêm danh mục'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: 'Tên danh mục'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final categoryName = controller.text.trim();
+              if (categoryName.isEmpty) return;
+
+              final provider = context.read<CategoryProvider>();
+              final navigator = Navigator.of(dialogContext);
+              final messenger = ScaffoldMessenger.of(context);
+
+              try {
+                await provider.addCategory(categoryName);
+                navigator.pop();
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('Thêm danh mục thành công')),
+                );
+              } catch (error) {
+                messenger.showSnackBar(
+                  SnackBar(content: Text(error.toString())),
+                );
+              }
+            },
+            child: const Text('Thêm'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -56,15 +99,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                       label: 'Add',
                       icon: Icons.add_rounded,
                       expanded: false,
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Category management will be implemented later',
-                            ),
-                          ),
-                        );
-                      },
+                      onPressed: () => _showAddCategoryDialog(context),
                     ),
                   ],
                 ),

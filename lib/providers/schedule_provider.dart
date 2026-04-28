@@ -97,7 +97,10 @@ class ScheduleProvider extends ChangeNotifier {
         await _scheduleNotification(updated);
       } else {
         await _notificationService.cancelNotification(
-          _notificationIdFromScheduleId(updated.id),
+          _notificationIdFromScheduleId('${updated.id}_advance'),
+        );
+        await _notificationService.cancelNotification(
+          _notificationIdFromScheduleId('${updated.id}_exact'),
         );
       }
 
@@ -115,7 +118,10 @@ class ScheduleProvider extends ChangeNotifier {
     try {
       await _scheduleService.deleteSchedule(id);
       await _notificationService.cancelNotification(
-        _notificationIdFromScheduleId(id),
+        _notificationIdFromScheduleId('${id}_advance'),
+      );
+      await _notificationService.cancelNotification(
+        _notificationIdFromScheduleId('${id}_exact'),
       );
       _schedules.removeWhere((schedule) => schedule.id == id);
       _errorMessage = null;
@@ -141,7 +147,13 @@ class ScheduleProvider extends ChangeNotifier {
       reminderDateTime,
       'Sắp đến giờ đi ${schedule.displayPlaceName}',
       'Bạn có lịch đến ${schedule.displayPlaceName} lúc ${schedule.time}.',
-      id: _notificationIdFromScheduleId(schedule.id),
+      id: _notificationIdFromScheduleId('${schedule.id}_advance'),
+    );
+    await _notificationService.scheduleNotification(
+      visitDateTime,
+      'Đến giờ đi ${schedule.displayPlaceName} rồi!',
+      'Đã đến giờ theo lịch trình của bạn. Chúc bạn vui vẻ!',
+      id: _notificationIdFromScheduleId('${schedule.id}_exact'),
     );
   }
 }
