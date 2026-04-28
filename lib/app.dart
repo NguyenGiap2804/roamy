@@ -6,7 +6,7 @@ import 'core/theme/app_theme.dart';
 import 'providers/category_provider.dart';
 import 'providers/place_provider.dart';
 import 'providers/schedule_provider.dart';
-import 'screens/main_navigation_screen.dart';
+import 'screens/splash_screen.dart';
 import 'services/category_service.dart';
 import 'services/notification_service.dart';
 import 'services/place_service.dart';
@@ -47,10 +47,10 @@ class RoamyApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
-        title: 'Roamy',
+        title: 'RoaMy Place',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
-        home: const MainNavigationScreen(),
+        home: const SplashScreen(),
       ),
     );
   }
