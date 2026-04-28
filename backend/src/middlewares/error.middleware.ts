@@ -37,7 +37,9 @@ export function errorMiddleware(
 
   return res.status(500).json({
     data: null,
-    message: 'Internal server error',
+    message: error.message || 'Internal server error',
+    errorName: error.name,
+    stack: error.stack,
     status: 500,
   });
 }
