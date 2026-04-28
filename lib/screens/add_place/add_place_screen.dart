@@ -158,10 +158,11 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
           if (response.statusCode == 200) {
             final bodyBytes = await response.stream.toBytes();
             final body = utf8.decode(bodyBytes, allowMalformed: true);
-            final RegExp metaRefreshRegex = RegExp(r'url=([^"'"' >]+)', caseSensitive: false);
+            final RegExp metaRefreshRegex = RegExp(r"url=([^\"' >]+)", caseSensitive: false);
             final match = metaRefreshRegex.firstMatch(body);
             if (match != null && match.groupCount >= 1) {
-              final newUrl = match.group(1)!;
+              var newUrl = match.group(1)!;
+              newUrl = newUrl.replaceAll('&amp;', '&');
               finalUrl = Uri.parse(finalUrl).resolve(newUrl).toString();
               request = http.Request('GET', Uri.parse(finalUrl))
                 ..followRedirects = false
