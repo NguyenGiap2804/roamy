@@ -149,22 +149,43 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     try {
       var finalUrl = url;
       var request = http.Request('GET', Uri.parse(finalUrl))
-        ..followRedirects = false;
+        ..followRedirects = false
+        ..headers['Cookie'] = 'CONSENT=YES+cb.20230101-11-p0.en+FX+113;';
       var response = await client.send(request);
 
       for (var index = 0; index < 10; index++) {
-        if (!response.isRedirect) break;
+        if (!response.isRedirect) {
+          if (response.statusCode == 200) {
+            final bodyBytes = await response.stream.toBytes();
+            final body = utf8.decode(bodyBytes, allowMalformed: true);
+            final RegExp metaRefreshRegex = RegExp(r'url=([^"'"' >]+)', caseSensitive: false);
+            final match = metaRefreshRegex.firstMatch(body);
+            if (match != null && match.groupCount >= 1) {
+              final newUrl = match.group(1)!;
+              finalUrl = Uri.parse(finalUrl).resolve(newUrl).toString();
+              request = http.Request('GET', Uri.parse(finalUrl))
+                ..followRedirects = false
+                ..headers['Cookie'] = 'CONSENT=YES+cb.20230101-11-p0.en+FX+113;';
+              response = await client.send(request);
+              continue;
+            }
+          }
+          break;
+        }
         final location = response.headers['location'];
         if (location != null) {
           finalUrl = Uri.parse(finalUrl).resolve(location).toString();
         }
         request = http.Request('GET', Uri.parse(finalUrl))
-          ..followRedirects = false;
+          ..followRedirects = false
+          ..headers['Cookie'] = 'CONSENT=YES+cb.20230101-11-p0.en+FX+113;';
         response = await client.send(request);
       }
 
       final uri = Uri.parse(finalUrl);
       final pathSegments = uri.pathSegments;
+
+      bool foundData = false;
 
       if (pathSegments.contains('place')) {
         final placeIndex = pathSegments.indexOf('place');
@@ -173,6 +194,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
           if (_nameController.text.isEmpty) {
             _nameController.text = decodedName;
           }
+          foundData = true;
         }
       }
 
@@ -182,14 +204,22 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
           if (parts.length >= 2) {
             _latitude = double.tryParse(parts[0]);
             _longitude = double.tryParse(parts[1]);
+            foundData = true;
           }
         }
       }
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tự động điền tên và tọa độ thành công')),
-      );
+      
+      if (foundData) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tự động điền tên và tọa độ thành công')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Không tìm thấy thông tin trong link này')),
+        );
+      }
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
