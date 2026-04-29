@@ -11,6 +11,7 @@ import '../../widgets/category_filter_chip.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/place_card.dart';
 import '../../widgets/section_title.dart';
+import '../add_place/add_place_screen.dart';
 import '../place_detail/place_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -153,6 +154,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       padding: const EdgeInsets.only(bottom: 14),
                       child: PlaceCard(
                         place: place,
+                        onUpdate: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => AddPlaceScreen(place: place),
+                            ),
+                          );
+                          if (context.mounted) {
+                            await context.read<PlaceProvider>().fetchPlaces();
+                          }
+                        },
                         onTap: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(

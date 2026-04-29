@@ -139,27 +139,42 @@ class ScheduleProvider extends ChangeNotifier {
   }
 
   Future<void> _scheduleNotification(Schedule schedule) async {
+    final now = DateTime.now();
     final visitDateTime = _visitDateTime(schedule);
-    final reminderDateTime = visitDateTime.subtract(
-      const Duration(minutes: 30),
-    );
-    await _notificationService.scheduleNotification(
-      reminderDateTime,
-      'Sắp đến giờ đi ${schedule.displayPlaceName}',
-      'Bạn có lịch đến ${schedule.displayPlaceName} lúc ${schedule.time}.',
-      id: _notificationIdFromScheduleId('${schedule.id}_advance'),
-    );
+
+    final exactId = _notificationIdFromScheduleId('${schedule.id}_exact');
+    await _notificationService.cancelNotification(exactId);
+
+    // Always schedule/show the exact time reminder
     await _notificationService.scheduleNotification(
       visitDateTime,
       'Đến giờ đi ${schedule.displayPlaceName} rồi!',
       'Đã đến giờ theo lịch trình của bạn. Chúc bạn vui vẻ!',
-      id: _notificationIdFromScheduleId('${schedule.id}_exact'),
+      id: exactId,
     );
+
+    // Only schedule the 30-minute advance reminder if it's actually in the future
+    final reminderDateTime = visitDateTime.subtract(
+      const Duration(minutes: 30),
+    );
+
+    final advanceId = _notificationIdFromScheduleId('${schedule.id}_advance');
+    await _notificationService.cancelNotification(advanceId);
+
+    if (reminderDateTime.isAfter(now)) {
+      await _notificationService.scheduleNotification(
+        reminderDateTime,
+        'Sắp đến giờ đi ${schedule.displayPlaceName}',
+        'Bạn có lịch đến ${schedule.displayPlaceName} lúc ${schedule.time}.',
+        id: advanceId,
+      );
+    }
   }
 }
 
 DateTime _visitDateTime(Schedule schedule) {
-  final parts = schedule.time.split(':');
+  final startTime = schedule.time.split('-').first.trim();
+  final parts = startTime.split(':');
   final hour = int.tryParse(parts.first) ?? 0;
   final minute = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
   return DateTime(

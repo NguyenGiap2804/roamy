@@ -12,7 +12,7 @@ class MapPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (place.latitude == null || place.longitude == null) {
+    if (!place.hasCoordinates) {
       return Container(
         height: 200,
         width: double.infinity,

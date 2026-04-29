@@ -10,6 +10,7 @@ class GoogleMapsPlaceData {
     this.priceRange,
     this.openingHours,
     this.phone,
+    this.rating,
     this.latitude,
     this.longitude,
   });
@@ -19,6 +20,7 @@ class GoogleMapsPlaceData {
   final String? priceRange;
   final String? openingHours;
   final String? phone;
+  final double? rating;
   final double? latitude;
   final double? longitude;
 
@@ -28,6 +30,7 @@ class GoogleMapsPlaceData {
         priceRange != null ||
         openingHours != null ||
         phone != null ||
+        rating != null ||
         latitude != null ||
         longitude != null;
   }
@@ -39,6 +42,7 @@ class GoogleMapsPlaceData {
       priceRange: _prefer(priceRange, other.priceRange),
       openingHours: _prefer(openingHours, other.openingHours),
       phone: _prefer(phone, other.phone),
+      rating: rating ?? other.rating,
       latitude: latitude ?? other.latitude,
       longitude: longitude ?? other.longitude,
     );
@@ -59,15 +63,17 @@ class GoogleMapsExtractionService {
       final response = await client
           .get(_preferVietnamese(currentUri), headers: _headers)
           .timeout(_timeout);
-      data = data.merge(_extractFromHtml(response.body, currentUri));
+      final responseUri = response.request?.url ?? currentUri;
+      data = _extractFromUri(responseUri).merge(data);
+      data = _extractFromHtml(response.body, responseUri).merge(data);
 
-      final previewUri = _findPreviewUri(response.body, currentUri);
+      final previewUri = _findPreviewUri(response.body, responseUri);
       if (previewUri != null) {
         final previewResponse = await _send(client, previewUri);
         final previewBody = await previewResponse.stream.bytesToString();
-        data = data
-            .merge(_extractFromUri(previewUri))
-            .merge(extractFromPreviewBody(previewBody));
+        data = extractFromPreviewBody(
+          previewBody,
+        ).merge(_extractFromUri(previewUri)).merge(data);
       }
 
       if (data.hasAnyData) return data;
@@ -79,20 +85,20 @@ class GoogleMapsExtractionService {
           final location = response.headers['location'];
           if (location == null || location.isEmpty) break;
           currentUri = currentUri.resolve(location);
-          data = data.merge(_extractFromUri(currentUri));
+          data = _extractFromUri(currentUri).merge(data);
           continue;
         }
 
         final body = await response.stream.bytesToString();
-        data = data.merge(_extractFromHtml(body, currentUri));
+        data = _extractFromHtml(body, currentUri).merge(data);
 
         final previewUri = _findPreviewUri(body, currentUri);
         if (previewUri != null) {
           final previewResponse = await _send(client, previewUri);
           final previewBody = await previewResponse.stream.bytesToString();
-          data = data
-              .merge(_extractFromUri(previewUri))
-              .merge(extractFromPreviewBody(previewBody));
+          data = extractFromPreviewBody(
+            previewBody,
+          ).merge(_extractFromUri(previewUri)).merge(data);
         }
 
         break;
@@ -115,9 +121,10 @@ class GoogleMapsExtractionService {
     return GoogleMapsPlaceData(
       name: name,
       address: _stripPlaceNameFromAddress(address, name),
-      priceRange: _findPriceRange(strings),
+      priceRange: _findPriceRange(text, strings),
       openingHours: _findOpeningHours(strings),
       phone: _findPhone(strings),
+      rating: _findRating(text, strings),
       latitude: coords.$1,
       longitude: coords.$2,
     );
@@ -136,8 +143,8 @@ class GoogleMapsExtractionService {
     'Accept-Language': 'vi,en;q=0.8',
     'Cookie': 'CONSENT=YES+cb.20230101-11-p0.en+FX+113;',
     'User-Agent':
-        'Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 '
-        '(KHTML, like Gecko) Chrome/121.0 Mobile Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+        '(KHTML, like Gecko) Chrome/121.0 Safari/537.36',
   };
 
   GoogleMapsPlaceData _extractFromHtml(String body, Uri baseUri) {
@@ -264,7 +271,7 @@ class GoogleMapsExtractionService {
 
   String? _findPlaceName(String text, List<String> strings, String? address) {
     final exactMatch = RegExp(
-      r'"([^"]+)",null,\["(?:Quán cà phê|Coffee shop|Restaurant|Cafe|Café|Bar|Store|Shop)',
+      r'"([^"]+)",null,\["(?:Quán cà phê|Cửa hàng|Nhà hàng|Coffee shop|Restaurant|Cafe|Café|Bar|Store|Shop|Park|Hotel|Mall|Cinema|Hospital|School|Gym)',
       caseSensitive: false,
     ).firstMatch(text);
     if (exactMatch != null) return _clean(exactMatch.group(1));
@@ -279,24 +286,100 @@ class GoogleMapsExtractionService {
   }
 
   String? _findAddress(List<String> strings) {
-    final candidates = strings.map(_clean).whereType<String>().where((value) {
-      final lower = value.toLowerCase();
-      return value.contains(',') &&
-          !lower.startsWith('http') &&
-          !lower.contains('google maps') &&
-          (lower.contains('vietnam') || lower.contains('việt nam'));
-    }).toList();
+    final candidates = strings
+        .map(_clean)
+        .whereType<String>()
+        .where(_isAddressCandidate)
+        .where((value) {
+          final lower = value.toLowerCase();
+          return lower.contains('vietnam') || lower.contains('việt nam');
+        })
+        .toList();
+
+    if (candidates.isEmpty) {
+      candidates.addAll(
+        strings
+            .map(_clean)
+            .whereType<String>()
+            .where(_isAddressCandidate)
+            .where((value) => value.split(',').length >= 3),
+      );
+    }
 
     if (candidates.isEmpty) return null;
 
     candidates.sort((a, b) {
-      final aPlusCode = RegExp(r'^[0-9A-Z]{4}\+').hasMatch(a);
-      final bPlusCode = RegExp(r'^[0-9A-Z]{4}\+').hasMatch(b);
-      if (aPlusCode != bPlusCode) return aPlusCode ? 1 : -1;
+      // Prioritize addresses that are longer (more specific)
+      // but penalize those that are ONLY a Plus Code.
+      final aIsOnlyPlusCode = RegExp(
+        r'^[0-9A-Z]{4}\+[0-9A-Z]{2,3}$',
+      ).hasMatch(a);
+      final bIsOnlyPlusCode = RegExp(
+        r'^[0-9A-Z]{4}\+[0-9A-Z]{2,3}$',
+      ).hasMatch(b);
+      if (aIsOnlyPlusCode != bIsOnlyPlusCode) return aIsOnlyPlusCode ? 1 : -1;
+
+      final scoreCompare = _addressScore(b).compareTo(_addressScore(a));
+      if (scoreCompare != 0) return scoreCompare;
+
       return b.length.compareTo(a.length);
     });
 
     return candidates.first;
+  }
+
+  bool _isAddressCandidate(String value) {
+    if (value.length > 220 || value.contains('\n')) return false;
+    if (!value.contains(',')) return false;
+
+    final lower = value.toLowerCase();
+    if (lower.startsWith('http')) return false;
+    if (lower.contains('google maps')) return false;
+    if (lower.contains('anniversary')) return false;
+    if (lower.contains('sponsor')) return false;
+    if (lower.contains('website:')) return false;
+    if (lower.contains('email:')) return false;
+    if (RegExp(
+      r'\b(thg|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b',
+    ).hasMatch(lower)) {
+      return false;
+    }
+
+    return _addressScore(value) > 0;
+  }
+
+  int _addressScore(String value) {
+    final lower = value.toLowerCase();
+    var score = 0;
+
+    if (RegExp(r'\b\d+[a-z]?\b').hasMatch(value)) score += 2;
+    if (lower.contains('đ.') ||
+        lower.contains('đường') ||
+        lower.contains('street') ||
+        lower.contains('road')) {
+      score += 3;
+    }
+    if (lower.contains('building') ||
+        lower.contains('tòa') ||
+        lower.contains('toà')) {
+      score += 2;
+    }
+    if (lower.contains('khu đô thị') ||
+        lower.contains('phường') ||
+        lower.contains('quận') ||
+        lower.contains('huyện') ||
+        lower.contains('thành phố')) {
+      score += 2;
+    }
+    if (lower.contains('hà nội') ||
+        lower.contains('hồ chí minh') ||
+        lower.contains('đà nẵng')) {
+      score += 2;
+    }
+    if (lower.contains('vietnam') || lower.contains('việt nam')) score += 2;
+    if (RegExp(r'^[0-9A-Z]{4}\+[0-9A-Z]{2,3}').hasMatch(value)) score -= 3;
+
+    return score;
   }
 
   String? _findPhone(List<String> strings) {
@@ -314,24 +397,71 @@ class GoogleMapsExtractionService {
   }
 
   String? _findOpeningHours(List<String> strings) {
+    String? fallback;
     for (final value in strings) {
       final cleaned = _clean(value);
       if (cleaned == null) continue;
       final lower = cleaned.toLowerCase();
       if (lower.startsWith('http')) continue;
       if (lower == 'open' || lower == 'closed') continue;
-      if (lower.contains('xóa bỏ') ||
+      if (cleaned.length > 120) continue;
+
+      // Skip noise/action strings
+      if (lower.contains('sửa tên') ||
+          lower.contains('chỉnh sửa') ||
+          lower.contains('đề xuất') ||
+          lower.contains('đánh dấu') ||
+          lower.contains('báo cáo') ||
+          lower.contains('suggest') ||
+          lower.contains('edit') ||
+          lower.contains('mark ') ||
+          lower.contains('report') ||
+          lower.contains('xóa bỏ') ||
           lower.contains('không có ở đây') ||
           lower.contains('not here')) {
         continue;
       }
-      if (lower.startsWith('mở') ||
-          lower.contains('open 24 hours') ||
-          lower.contains('hours')) {
+
+      // High confidence: contains a time range pattern
+      if (RegExp(r'\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}').hasMatch(cleaned)) {
         return cleaned;
       }
+
+      if (_isOpeningHoursCandidate(cleaned) && fallback == null) {
+        fallback = cleaned;
+      }
     }
-    return null;
+    return fallback;
+  }
+
+  bool _isOpeningHoursCandidate(String value) {
+    final lower = value.toLowerCase();
+    final hasTime = RegExp(r'\d{1,2}:\d{2}').hasMatch(value);
+    if (hasTime) {
+      return lower.contains('mở') ||
+          lower.contains('đóng') ||
+          lower.contains('open') ||
+          lower.contains('closed') ||
+          lower.contains('giờ') ||
+          lower.contains('hours') ||
+          _hasWeekday(value);
+    }
+
+    if (RegExp(
+      r'^(mở cửa cả ngày|mở cả ngày|open 24 hours|open 24h|24 hours)$',
+      caseSensitive: false,
+    ).hasMatch(value)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  bool _hasWeekday(String value) {
+    return RegExp(
+      r'\b(mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday|thứ|chủ nhật|chủ nhật)\b',
+      caseSensitive: false,
+    ).hasMatch(value);
   }
 
   String? _phoneMatch(
@@ -352,22 +482,148 @@ class GoogleMapsExtractionService {
     return phone;
   }
 
-  String? _findPriceRange(List<String> strings) {
+  String? _findPriceRange(String text, List<String> strings) {
+    // 1. Priority: Look for descriptive ranges (e.g., "10.000 - 50.000 ₫")
+    for (final value in strings) {
+      final cleaned = _clean(value);
+      if (cleaned == null || cleaned.length > 80) continue;
+      final lower = cleaned.toLowerCase();
+
+      // High confidence if it contains currency symbols and a number
+      final hasCurrency =
+          lower.contains('₫') ||
+          lower.contains('đ') ||
+          lower.contains('vnd') ||
+          lower.contains('vnđ') ||
+          lower.contains('\$') ||
+          lower.contains('€');
+
+      if (hasCurrency && RegExp(r'\d').hasMatch(cleaned)) {
+        // Exclude clear status strings or very long digit sequences
+        if (lower.contains('mở cửa') ||
+            lower.contains('đóng cửa') ||
+            RegExp(r'\d{12}').hasMatch(cleaned)) {
+          continue;
+        }
+        final normalized = _normalizePriceRange(cleaned);
+        if (normalized != null) return normalized;
+      }
+    }
+
+    // 2. Secondary: Look for simple levels like $$, ₫₫
+    String? singleCurrencyFallback;
     for (final value in strings) {
       final cleaned = _clean(value);
       if (cleaned == null) continue;
-      if (RegExp(r'\d').hasMatch(cleaned) &&
-          (cleaned.contains('₫') || cleaned.contains('đ/'))) {
+      if (RegExp(r'^[\$\d₫€]{1,4}$').hasMatch(cleaned)) {
+        if (RegExp(r'^\d+$').hasMatch(cleaned)) continue;
+        if (RegExp(r'^[\$₫€]$').hasMatch(cleaned)) {
+          singleCurrencyFallback ??= cleaned;
+          continue;
+        }
         return cleaned;
       }
     }
+
+    // 3. Fallback: Structured data
+    final priceLevelMatch = RegExp(
+      r'\["(?:Price|Giá|Mức giá)",\s*null,\s*"?([^"\],]+)"?\]',
+    ).firstMatch(text);
+    if (priceLevelMatch != null) {
+      final level = _clean(priceLevelMatch.group(1));
+      if (level == '1') return '₫';
+      if (level == '2') return '₫₫';
+      if (level == '3') return '₫₫₫';
+      if (level == '4') return '₫₫₫₫';
+      if (level != null && level.length > 1) return level;
+    }
+
+    // 4. Final attempt: Join strings to find split price range
+    final joined = strings.join(' ');
+    // Restrict digits to realistic currency lengths (max 10-12 digits)
+    // and ensure the total match isn't absurdly long.
+    final moneyPattern = RegExp(
+      r'((?:₫|đ|VND|vnđ|\$|€)?\s*\d{1,9}(?:[\.,]\d{3})*\s*[-–]\s*\d{1,9}(?:[\.,]\d{3})*\s*(?:₫|đ|VND|vnđ|\$|€|mỗi người|/người|per person|/person)?)',
+      caseSensitive: false,
+    );
+    final match = moneyPattern.firstMatch(joined);
+    if (match != null) {
+      final result = _normalizePriceRange(match.group(1));
+      if (result != null && result.length < 35) return result;
+    }
+
+    final rawMatch = moneyPattern.firstMatch(text);
+    if (rawMatch != null) {
+      final result = _normalizePriceRange(rawMatch.group(1));
+      if (result != null && result.length < 35) return result;
+    }
+
+    return singleCurrencyFallback;
+  }
+
+  double? _findRating(String text, List<String> strings) {
+    final structuredRating = RegExp(
+      r'\[null,null,null,null,null,null,null,([1-5](?:\.\d)?)\]',
+    ).firstMatch(text);
+    if (structuredRating != null) {
+      return double.tryParse(structuredRating.group(1)!);
+    }
+
+    for (final value in strings) {
+      final cleaned = _clean(value);
+      if (cleaned == null) continue;
+      final ratingMatch = RegExp(
+        r'(^|[^\d])([1-5](?:[\.,]\d))\s*(?:\(\d+\)|sao|stars?)',
+        caseSensitive: false,
+      ).firstMatch(cleaned);
+      if (ratingMatch == null) continue;
+      final rating = double.tryParse(
+        ratingMatch.group(2)!.replaceAll(',', '.'),
+      );
+      if (rating != null && rating >= 1 && rating <= 5) return rating;
+    }
+
     return null;
+  }
+
+  String? _normalizePriceRange(String? value) {
+    final cleaned = _clean(value);
+    if (cleaned == null) return null;
+
+    final hasPriceShape =
+        RegExp(
+          r'[₫đ$€]|vnd|vnđ|mỗi người|/người|per person|/person',
+          caseSensitive: false,
+        ).hasMatch(cleaned) &&
+        RegExp(r'\d').hasMatch(cleaned);
+    if (!hasPriceShape) return null;
+
+    final match = RegExp(
+      r'((?:₫|đ|VND|vnđ|\$|€)?\s*\d{1,9}(?:[\.,]\d{3})*(?:\s*[-–]\s*\d{1,9}(?:[\.,]\d{3})*)?\s*(?:₫|đ|VND|vnđ|\$|€)?(?:\s*(?:mỗi người|/người|per person|/person))?)',
+      caseSensitive: false,
+    ).firstMatch(cleaned);
+
+    return _clean(match?.group(1) ?? cleaned);
   }
 
   String? _stripPlaceNameFromAddress(String? address, String? name) {
     if (address == null || name == null) return address;
+
+    // Remove if it's at the start
     final prefix = '$name, ';
     if (address.startsWith(prefix)) return address.substring(prefix.length);
+
+    // Remove if it's inside (e.g., "PlusCode Name, Address")
+    final escapedName = RegExp.escape(name);
+    final pattern = RegExp(
+      '([A-Z0-9]{4}\\+[A-Z0-9]{2,3})\\s+$escapedName,\\s*',
+      caseSensitive: false,
+    );
+    final match = pattern.firstMatch(address);
+    if (match != null) {
+      return address.replaceFirst(match.group(0)!, '${match.group(1)!}, ');
+    }
+
     return address;
   }
 

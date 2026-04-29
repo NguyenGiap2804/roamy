@@ -4,7 +4,10 @@ import { z } from 'zod';
 const dateSchema = z.iso.date('date must use YYYY-MM-DD format');
 const timeSchema = z
   .string()
-  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'time must use HH:mm format');
+  .regex(
+    /^([01]\d|2[0-3]):[0-5]\d(?:-([01]\d|2[0-3]):[0-5]\d)?$/,
+    'time must use HH:mm or HH:mm-HH:mm format',
+  );
 
 const scheduleBaseSchema = z.object({
   placeId: z.uuid('placeId must be a valid UUID'),

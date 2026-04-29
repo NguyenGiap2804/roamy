@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -11,29 +12,37 @@ class NotificationService {
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
+  bool _canScheduleExactNotifications = false;
 
   static const _androidChannel = AndroidNotificationChannel(
     'roamy_reminders',
     'Roamy reminders',
     description: 'Place visit reminders for Roamy',
-    importance: Importance.high,
+    importance: Importance.max,
+    playSound: true,
+    enableVibration: true,
   );
 
   Future<void> init() async {
     tz.initializeTimeZones();
-    final timezoneName = const String.fromEnvironment(
-      'ROAMY_TIMEZONE',
-      defaultValue: 'Asia/Ho_Chi_Minh',
-    );
-    tz.setLocalLocation(tz.getLocation(timezoneName));
+    try {
+      final timezoneName = const String.fromEnvironment(
+        'ROAMY_TIMEZONE',
+        defaultValue: 'Asia/Ho_Chi_Minh',
+      );
+      tz.setLocalLocation(tz.getLocation(timezoneName));
+    } catch (e) {
+      debugPrint('Timezone initialization failed: $e. Falling back to UTC.');
+      tz.setLocalLocation(tz.getLocation('UTC'));
+    }
 
     const androidSettings = AndroidInitializationSettings(
-      '@mipmap/ic_launcher',
+      '@mipmap/launcher_icon',
     );
     const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: false,
-      requestBadgePermission: false,
-      requestSoundPermission: false,
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
     );
 
     const settings = InitializationSettings(
@@ -42,9 +51,18 @@ class NotificationService {
       macOS: iosSettings,
     );
 
-    await _plugin.initialize(settings: settings);
+    await _plugin.initialize(
+      settings: settings,
+      onDidReceiveNotificationResponse: (NotificationResponse details) {
+        debugPrint('Notification tapped: ${details.payload}');
+      },
+    );
     await _createAndroidChannel();
     await requestPermissions();
+    _refreshExactAlarmPermission(); 
+    
+    // Test notification on startup to verify permissions
+    await showInstantNotification('RoaMy Place', 'Hệ thống nhắc nhở đã sẵn sàng!');
   }
 
   Future<void> requestPermissions() async {
@@ -100,7 +118,7 @@ class NotificationService {
       body: body,
       scheduledDate: scheduledDate,
       notificationDetails: _details(),
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      androidScheduleMode: _androidScheduleMode,
     );
 
     return notificationId;
@@ -122,14 +140,43 @@ class NotificationService {
         ?.createNotificationChannel(_androidChannel);
   }
 
+  Future<void> _refreshExactAlarmPermission() async {
+    if (!Platform.isAndroid) {
+      _canScheduleExactNotifications = true;
+      return;
+    }
+
+    final androidPlugin = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+
+    final canScheduleExact =
+        await androidPlugin?.canScheduleExactNotifications() ?? false;
+    if (canScheduleExact) {
+      _canScheduleExactNotifications = true;
+      return;
+    }
+
+    _canScheduleExactNotifications =
+        await androidPlugin?.requestExactAlarmsPermission() ?? false;
+  }
+
+  AndroidScheduleMode get _androidScheduleMode {
+    return _canScheduleExactNotifications
+        ? AndroidScheduleMode.exactAllowWhileIdle
+        : AndroidScheduleMode.inexactAllowWhileIdle;
+  }
+
   NotificationDetails _details() {
     const androidDetails = AndroidNotificationDetails(
       'roamy_reminders',
       'Roamy reminders',
       channelDescription: 'Place visit reminders for Roamy',
-      importance: Importance.high,
-      priority: Priority.high,
-      icon: '@mipmap/ic_launcher',
+      importance: Importance.max,
+      priority: Priority.max,
+      icon: '@mipmap/launcher_icon',
+      channelShowBadge: true,
     );
 
     const iosDetails = DarwinNotificationDetails(

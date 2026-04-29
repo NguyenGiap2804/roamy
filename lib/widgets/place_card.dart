@@ -7,10 +7,16 @@ import '../models/place.dart';
 import 'rating_stars.dart';
 
 class PlaceCard extends StatelessWidget {
-  const PlaceCard({super.key, required this.place, required this.onTap});
+  const PlaceCard({
+    super.key,
+    required this.place,
+    required this.onTap,
+    this.onUpdate,
+  });
 
   final Place place;
   final VoidCallback onTap;
+  final VoidCallback? onUpdate;
 
   @override
   Widget build(BuildContext context) {
@@ -89,13 +95,51 @@ class PlaceCard extends StatelessWidget {
                       text: place.priceRange,
                     ),
                     const SizedBox(height: 9),
-                    RatingStars(rating: place.rating, compact: true),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: RatingStars(
+                            rating: place.rating,
+                            compact: true,
+                          ),
+                        ),
+                        if (onUpdate != null) ...[
+                          const SizedBox(width: 8),
+                          _UpdateButton(onPressed: onUpdate!),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _UpdateButton extends StatelessWidget {
+  const _UpdateButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton.icon(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        foregroundColor: AppColors.primaryDark,
+      ),
+      icon: const Icon(Icons.edit_rounded, size: 14),
+      label: const Text(
+        'Cập nhật',
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
       ),
     );
   }

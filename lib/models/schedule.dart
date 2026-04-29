@@ -9,6 +9,10 @@ class Schedule {
     this.placeName,
     this.category,
     this.address,
+    this.openingHours,
+    this.mapsUrl,
+    this.latitude,
+    this.longitude,
   });
 
   final String id;
@@ -20,6 +24,10 @@ class Schedule {
   final String? placeName;
   final String? category;
   final String? address;
+  final String? openingHours;
+  final String? mapsUrl;
+  final double? latitude;
+  final double? longitude;
 
   factory Schedule.fromJson(Map<String, dynamic> json) {
     final place = json['place'];
@@ -42,6 +50,22 @@ class Schedule {
       address: place is Map<String, dynamic>
           ? place['address'] as String?
           : json['address'] as String?,
+      openingHours: place is Map<String, dynamic>
+          ? place['openingHours'] as String?
+          : json['openingHours'] as String?,
+      mapsUrl: place is Map<String, dynamic>
+          ? place['mapsUrl'] as String?
+          : json['mapsUrl'] as String?,
+      latitude: place is Map<String, dynamic> && place['latitude'] != null
+          ? (place['latitude'] as num).toDouble()
+          : json['latitude'] != null
+          ? (json['latitude'] as num).toDouble()
+          : null,
+      longitude: place is Map<String, dynamic> && place['longitude'] != null
+          ? (place['longitude'] as num).toDouble()
+          : json['longitude'] != null
+          ? (json['longitude'] as num).toDouble()
+          : null,
     );
   }
 
@@ -58,6 +82,10 @@ class Schedule {
   String get displayPlaceName => placeName ?? 'Saved place';
   String get displayCategory => category ?? 'Other';
   String get displayAddress => address ?? 'No address';
+  String get displayOpeningHours =>
+      openingHours?.trim().isNotEmpty == true ? openingHours! : time;
+  bool get hasMapsUrl => mapsUrl?.trim().isNotEmpty == true;
+  bool get hasCoordinates => latitude != null && longitude != null;
 }
 
 String _dateToApi(DateTime date) {

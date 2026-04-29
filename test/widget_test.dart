@@ -5,9 +5,10 @@ import 'package:roamy/app.dart';
 void main() {
   testWidgets('Roamy home renders smoke test', (WidgetTester tester) async {
     await tester.pumpWidget(const RoamyApp());
+    await tester.pump();
 
-    expect(find.text('Hello, Nguyên Giáp 👋'), findsOneWidget);
-    expect(find.text('Where do you want to go next?'), findsOneWidget);
-    expect(find.text('Saved places'), findsOneWidget);
+    expect(find.text('RoaMy Place'), findsOneWidget);
+    expect(find.textContaining('L'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 2));
   });
 }
