@@ -7,6 +7,7 @@ import '../../core/constants/app_text_styles.dart';
 import '../../models/place.dart';
 import '../../providers/category_provider.dart';
 import '../../providers/place_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../widgets/category_filter_chip.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/place_card.dart';
@@ -68,35 +69,55 @@ class _HomeScreenState extends State<HomeScreen> {
                 96,
               ),
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Hello, Nguyên Giáp 👋',
-                            style: AppTextStyles.headline,
+                Consumer<ThemeProvider>(
+                  builder: (context, themeProvider, _) {
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Hello, Nguyên Giáp 👋',
+                                style: AppTextStyles.headline,
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Where do you want to go next?',
+                                style: AppTextStyles.subtitle,
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Where do you want to go next?',
-                            style: AppTextStyles.subtitle,
-                          ),
-                        ],
-                      ),
-                    ),
-                    CircleAvatar(
-                      radius: 24,
-                      backgroundColor: AppColors.primarySoft,
-                      child: Text(
-                        'NG',
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.primaryDark,
                         ),
-                      ),
-                    ),
-                  ],
+                        IconButton(
+                          onPressed: () => themeProvider.toggleTheme(),
+                          icon: Icon(
+                            themeProvider.isDarkMode
+                                ? Icons.light_mode_rounded
+                                : Icons.dark_mode_rounded,
+                            color: themeProvider.isDarkMode
+                                ? Colors.amber
+                                : AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        CircleAvatar(
+                          radius: 24,
+                          backgroundColor: themeProvider.isDarkMode
+                              ? Colors.white10
+                              : AppColors.primarySoft,
+                          child: Text(
+                            'NG',
+                            style: AppTextStyles.caption.copyWith(
+                              color: themeProvider.isDarkMode
+                                  ? Colors.white
+                                  : AppColors.primaryDark,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 22),
                 TextField(

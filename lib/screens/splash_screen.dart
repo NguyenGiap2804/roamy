@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'main_navigation_screen.dart';
 import '../core/constants/app_colors.dart';
+import '../core/constants/app_spacing.dart';
 import '../core/constants/app_text_styles.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -25,42 +26,52 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24.0),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Image.asset(
-                'assets/logo.png',
-                width: 180,
-                height: 180,
-                errorBuilder: (context, error, stackTrace) => const Icon(
-                  Icons.place_rounded,
-                  size: 100,
-                  color: AppColors.primary,
+      backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Image.asset(
+                  'assets/logo.png',
+                  width: 160,
+                  height: 160,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => const Icon(
+                    Icons.place_rounded,
+                    size: 80,
+                    color: AppColors.primary,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 32),
-              Text(
-                'RoaMy Place',
-                style: AppTextStyles.headline.copyWith(
-                  fontSize: 28,
-                  color: AppColors.primaryDark,
+                const SizedBox(height: 32),
+                Text(
+                  'RoaMy Place',
+                  style: AppTextStyles.headline.copyWith(
+                    fontSize: 32,
+                    color: isDark ? Colors.white : AppColors.primaryDark,
+                    letterSpacing: -0.5,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Lưu giữ mọi địa điểm, nhắc nhở từng chuyến đi',
-                style: AppTextStyles.body.copyWith(
-                  color: AppColors.textSecondary,
-                  fontSize: 16,
+                const SizedBox(height: 12),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 280),
+                  child: Text(
+                    'Lưu giữ mọi địa điểm, nhắc nhở từng chuyến đi',
+                    style: AppTextStyles.body.copyWith(
+                      color: isDark ? Colors.white70 : AppColors.textSecondary,
+                      fontSize: 15,
+                      height: 1.5,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
-                textAlign: TextAlign.center,
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -53,4 +53,53 @@ class AppTheme {
       ),
     );
   }
+
+  static ThemeData get dark {
+    final colorScheme = ColorScheme.fromSeed(
+      seedColor: AppColors.primary,
+      brightness: Brightness.dark,
+      primary: AppColors.primary,
+      surface: const Color(0xFF1E1E1E),
+      onSurface: Colors.white,
+    );
+
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: colorScheme,
+      scaffoldBackgroundColor: const Color(0xFF121212),
+      fontFamily: 'Roboto',
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Color(0xFF121212),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: false,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: const Color(0xFF1E1E1E),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radius),
+          borderSide: const BorderSide(color: Color(0xFF333333)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radius),
+          borderSide: const BorderSide(color: Color(0xFF333333)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radius),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+        ),
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: Color(0xFF1E1E1E),
+        selectedItemColor: AppColors.primary,
+        unselectedItemColor: Colors.white60,
+        type: BottomNavigationBarType.fixed,
+      ),
+    );
+  }
 }

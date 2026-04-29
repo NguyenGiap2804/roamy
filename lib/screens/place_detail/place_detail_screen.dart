@@ -176,17 +176,37 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                   ),
                 ),
                 flexibleSpace: FlexibleSpaceBar(
-                  background: Image.network(
-                    place.safeImageUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      color: AppColors.primarySoft,
-                      child: const Icon(
-                        Icons.place_rounded,
-                        size: 56,
-                        color: AppColors.primary,
+                  background: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.network(
+                        place.safeImageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: AppColors.primarySoft,
+                          child: const Icon(
+                            Icons.place_rounded,
+                            size: 56,
+                            color: AppColors.primary,
+                          ),
+                        ),
                       ),
-                    ),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            stops: const [0.0, 0.3, 0.7, 1.0],
+                            colors: [
+                              Colors.black.withValues(alpha: 0.4),
+                              Colors.black.withValues(alpha: 0.0),
+                              Colors.black.withValues(alpha: 0.0),
+                              Colors.black.withValues(alpha: 0.3),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -283,7 +303,7 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(18),
-                        decoration: _cardDecoration(),
+                        decoration: _cardDecoration(context),
                         child: Text(place.safeNote, style: AppTextStyles.body),
                       ),
                       const SizedBox(height: 22),
@@ -362,6 +382,9 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                           ),
                         ],
                       ),
+                      SizedBox(
+                        height: MediaQuery.of(context).padding.bottom + 24,
+                      ),
                     ],
                   ),
                 ),
@@ -374,11 +397,11 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
   }
 }
 
-BoxDecoration _cardDecoration() {
+BoxDecoration _cardDecoration(BuildContext context) {
   return BoxDecoration(
-    color: Colors.white,
+    color: Theme.of(context).colorScheme.surface,
     borderRadius: BorderRadius.circular(20),
-    border: Border.all(color: AppColors.border),
+    border: Border.all(color: Theme.of(context).dividerColor),
   );
 }
 
@@ -881,7 +904,7 @@ class _InfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: _cardDecoration(),
+      decoration: _cardDecoration(context),
       child: Column(children: children),
     );
   }

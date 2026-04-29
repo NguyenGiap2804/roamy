@@ -20,9 +20,14 @@ class PrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final style = FilledButton.styleFrom(
-      backgroundColor: secondary ? AppColors.primarySoft : AppColors.primary,
-      foregroundColor: secondary ? AppColors.primaryDark : Colors.white,
+      backgroundColor: secondary
+          ? (isDark ? Colors.white.withValues(alpha: 0.1) : AppColors.primarySoft)
+          : AppColors.primary,
+      foregroundColor: secondary
+          ? (isDark ? Colors.white : AppColors.primaryDark)
+          : Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       textStyle: const TextStyle(fontWeight: FontWeight.w800),

@@ -6,6 +6,7 @@ import 'core/theme/app_theme.dart';
 import 'providers/category_provider.dart';
 import 'providers/place_provider.dart';
 import 'providers/schedule_provider.dart';
+import 'providers/theme_provider.dart';
 import 'screens/splash_screen.dart';
 import 'services/category_service.dart';
 import 'services/notification_service.dart';
@@ -45,12 +46,21 @@ class RoamyApp extends StatelessWidget {
             context.read<NotificationService>(),
           ),
         ),
+        ChangeNotifierProvider<ThemeProvider>(
+          create: (_) => ThemeProvider(),
+        ),
       ],
-      child: MaterialApp(
-        title: 'RoaMy Place',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.light,
-        home: const SplashScreen(),
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, _) {
+          return MaterialApp(
+            title: 'RoaMy Place',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light,
+            darkTheme: AppTheme.dark,
+            themeMode: themeProvider.themeMode,
+            home: const SplashScreen(),
+          );
+        },
       ),
     );
   }

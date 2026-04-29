@@ -3,10 +3,16 @@ import 'package:flutter/material.dart';
 import '../core/constants/app_colors.dart';
 
 class RatingStars extends StatelessWidget {
-  const RatingStars({super.key, required this.rating, this.compact = false});
+  const RatingStars({
+    super.key,
+    required this.rating,
+    this.compact = false,
+    this.textColor,
+  });
 
   final double rating;
   final bool compact;
+  final Color? textColor;
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +39,7 @@ class RatingStars extends StatelessWidget {
           style: TextStyle(
             fontSize: compact ? 12 : 13,
             fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
+            color: textColor ?? AppColors.textPrimary,
           ),
         ),
       ],

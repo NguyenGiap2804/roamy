@@ -22,12 +22,16 @@ class CategoryFilterChip extends StatelessWidget {
       onSelected: onSelected,
       showCheckmark: false,
       labelStyle: TextStyle(
-        color: selected ? Colors.white : AppColors.textSecondary,
+        color: selected
+            ? Colors.white
+            : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
         fontWeight: FontWeight.w700,
       ),
       selectedColor: AppColors.primary,
-      backgroundColor: Colors.white,
-      side: BorderSide(color: selected ? AppColors.primary : AppColors.border),
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      side: BorderSide(
+        color: selected ? AppColors.primary : Theme.of(context).dividerColor,
+      ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
     );
   }

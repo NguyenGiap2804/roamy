@@ -472,7 +472,6 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                     'Place Image',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Colors.black54,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -492,13 +491,13 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                           right: 8,
                           top: 8,
                           child: CircleAvatar(
-                            backgroundColor: Colors.white.withValues(
+                            backgroundColor: Theme.of(context).colorScheme.surface.withValues(
                               alpha: 0.8,
                             ),
                             child: IconButton(
-                              icon: const Icon(
+                              icon: Icon(
                                 Icons.edit_rounded,
-                                color: Colors.black87,
+                                color: Theme.of(context).colorScheme.onSurface,
                               ),
                               onPressed: _pickImage,
                             ),
@@ -522,13 +521,13 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                                   height: 120,
                                   width: double.infinity,
                                   alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade50,
-                                    border: Border.all(
-                                      color: Colors.grey.shade300,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.surface,
+                                  border: Border.all(
+                                    color: Theme.of(context).dividerColor,
                                   ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
                                   child: const Icon(
                                     Icons.broken_image_rounded,
                                     color: Colors.grey,
@@ -540,13 +539,13 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                           right: 8,
                           top: 8,
                           child: CircleAvatar(
-                            backgroundColor: Colors.white.withValues(
+                            backgroundColor: Theme.of(context).colorScheme.surface.withValues(
                               alpha: 0.8,
                             ),
                             child: IconButton(
-                              icon: const Icon(
+                              icon: Icon(
                                 Icons.edit_rounded,
-                                color: Colors.black87,
+                                color: Theme.of(context).colorScheme.onSurface,
                               ),
                               onPressed: _pickImage,
                             ),
@@ -561,8 +560,8 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                         height: 120,
                         width: double.infinity,
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          border: Border.all(color: Colors.grey.shade300),
+                          color: Theme.of(context).colorScheme.surface,
+                          border: Border.all(color: Theme.of(context).dividerColor),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Column(
@@ -605,6 +604,9 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                         : (_isEditing ? 'Update place' : 'Save place'),
                     icon: Icons.check_rounded,
                     onPressed: _isSaving ? () {} : _save,
+                  ),
+                  SizedBox(
+                    height: MediaQuery.of(context).padding.bottom + 24,
                   ),
                 ],
               ),

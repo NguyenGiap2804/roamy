@@ -157,9 +157,9 @@ class _CategoryCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -168,7 +168,9 @@ class _CategoryCard extends StatelessWidget {
             width: 46,
             height: 46,
             decoration: BoxDecoration(
-              color: AppColors.primarySoft,
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? AppColors.primary.withValues(alpha: 0.15)
+                  : AppColors.primarySoft,
               borderRadius: BorderRadius.circular(15),
             ),
             child: Icon(category.iconData, color: AppColors.primary),

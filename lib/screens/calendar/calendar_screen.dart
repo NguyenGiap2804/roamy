@@ -72,7 +72,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     await showModalBottomSheet<void>(
       context: context,
       useSafeArea: true,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -173,6 +173,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         label: Text('Week $week'),
                         selected: selected,
                         onSelected: (_) => _selectWeek(week),
+                        labelStyle: TextStyle(
+                          color: selected
+                              ? Colors.white
+                              : Theme.of(context).colorScheme.onSurface,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        selectedColor: AppColors.primary,
+                        backgroundColor: Theme.of(context).colorScheme.surface,
                       );
                     },
                   ),
@@ -232,6 +240,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       onTap: () => _showScheduleQuickView(item),
                     ),
                   ),
+                const SizedBox(height: 24),
+                SizedBox(height: MediaQuery.of(context).padding.bottom + 24),
               ],
             ),
           );
@@ -265,10 +275,12 @@ class _DateTile extends StatelessWidget {
         width: 66,
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary : Colors.white,
+          color: selected
+              ? AppColors.primary
+              : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: selected ? AppColors.primary : AppColors.border,
+            color: selected ? AppColors.primary : Theme.of(context).dividerColor,
           ),
         ),
         child: Opacity(
@@ -287,7 +299,9 @@ class _DateTile extends StatelessWidget {
               Text(
                 '${date.day}',
                 style: TextStyle(
-                  color: selected ? Colors.white : AppColors.textPrimary,
+                  color: selected
+                      ? Colors.white
+                      : Theme.of(context).colorScheme.onSurface,
                   fontSize: 22,
                   fontWeight: FontWeight.w900,
                 ),
@@ -315,9 +329,9 @@ class _ScheduleCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.border),
+          border: Border.all(color: Theme.of(context).dividerColor),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -374,7 +388,9 @@ class _ScheduleTimeBadge extends StatelessWidget {
       width: 58,
       padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 6),
       decoration: BoxDecoration(
-        color: AppColors.primarySoft,
+        color: Theme.of(context).brightness == Brightness.dark
+            ? AppColors.primary.withValues(alpha: 0.15)
+            : AppColors.primarySoft,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -383,11 +399,13 @@ class _ScheduleTimeBadge extends StatelessWidget {
           Text(
             times.$1,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               height: 1.1,
               fontWeight: FontWeight.w900,
-              color: AppColors.primaryDark,
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? AppColors.primary
+                  : AppColors.primaryDark,
             ),
           ),
           if (times.$2 != null) ...[
@@ -403,11 +421,13 @@ class _ScheduleTimeBadge extends StatelessWidget {
             Text(
               times.$2!,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 height: 1.1,
                 fontWeight: FontWeight.w900,
-                color: AppColors.primaryDark,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? AppColors.primary
+                    : AppColors.primaryDark,
               ),
             ),
           ],
