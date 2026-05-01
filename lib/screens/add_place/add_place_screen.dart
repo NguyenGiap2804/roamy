@@ -7,9 +7,12 @@ import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
+import '../../core/network/api_client.dart';
 import '../../core/network/api_endpoints.dart';
+import '../../core/utils/snackbar_helper.dart';
 import '../../models/place.dart';
 import '../../providers/category_provider.dart';
 import '../../providers/place_provider.dart';
@@ -17,9 +20,10 @@ import '../../services/google_maps_extraction_service.dart';
 import '../../widgets/primary_button.dart';
 
 class AddPlaceScreen extends StatefulWidget {
-  const AddPlaceScreen({super.key, this.place});
+  const AddPlaceScreen({super.key, this.place, this.prefilledDraft});
 
   final Place? place;
+  final Map<String, dynamic>? prefilledDraft;
 
   @override
   State<AddPlaceScreen> createState() => _AddPlaceScreenState();
@@ -55,6 +59,9 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
   bool _isAutoFilling = false;
   double? _latitude;
   double? _longitude;
+  GoogleMapsExtractionReview? _extractionReview;
+  bool _showExtractionReview = false;
+  bool get _isDuplicateResolutionMode => widget.prefilledDraft != null;
 
   bool get _isEditing => widget.place != null;
 
@@ -62,6 +69,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
   void initState() {
     super.initState();
     _fillFromPlace(widget.place);
+    _applyPrefilledDraft(widget.prefilledDraft);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<CategoryProvider>().fetchCategories();
     });
@@ -96,6 +104,45 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     _longitude = place.longitude;
   }
 
+  void _applyPrefilledDraft(Map<String, dynamic>? draft) {
+    if (draft == null) return;
+
+    _applyDraftText(_mapsUrlController, draft['mapsUrl']);
+    _applyDraftText(_nameController, draft['name']);
+    _applyDraftText(_addressController, draft['address']);
+    _applyDraftText(_priceRangeController, draft['priceRange']);
+    _applyDraftText(_openingHoursController, draft['openingHours']);
+    _applyDraftText(_phoneController, draft['phone']);
+    _applyDraftText(_noteController, draft['note']);
+    _applyDraftText(_imageUrlController, draft['imageUrl']);
+
+    final categoryId = _draftString(draft['categoryId']);
+    if (categoryId != null) {
+      _selectedCategoryId = categoryId;
+    }
+
+    final rating = _draftDouble(draft['rating']);
+    if (rating != null) {
+      _rating = rating;
+    }
+
+    final latitude = _draftDouble(draft['latitude']);
+    if (latitude != null) {
+      _latitude = latitude;
+    }
+
+    final longitude = _draftDouble(draft['longitude']);
+    if (longitude != null) {
+      _longitude = longitude;
+    }
+  }
+
+  void _applyDraftText(TextEditingController controller, Object? value) {
+    final text = _draftString(value);
+    if (text == null) return;
+    controller.text = text;
+  }
+
   Future<void> _pickImage() async {
     final pickedFile = await _picker.pickImage(
       source: ImageSource.gallery,
@@ -112,7 +159,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     const maxUploadBytes = 5 * 1024 * 1024;
     final imageSize = await imageFile.length();
     if (imageSize > maxUploadBytes) {
-      throw const UploadException('Image must be 5MB or smaller');
+      throw const UploadException('Hình ảnh phải nhỏ hơn hoặc bằng 5MB');
     }
 
     final uri = Uri.parse('${ApiEndpoints.baseUrl}/upload');
@@ -159,7 +206,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
       }
     } catch (_) {}
 
-    return 'Failed to upload image';
+    return 'Tải ảnh lên thất bại';
   }
 
   void _showAddCategoryDialog(BuildContext context) {
@@ -184,7 +231,6 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
 
               final provider = context.read<CategoryProvider>();
               final navigator = Navigator.of(dialogContext);
-              final messenger = ScaffoldMessenger.of(context);
 
               try {
                 final newCategory = await provider.addCategory(categoryName);
@@ -193,9 +239,8 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                 }
                 navigator.pop();
               } catch (error) {
-                messenger.showSnackBar(
-                  SnackBar(content: Text(error.toString())),
-                );
+                if (!context.mounted) return;
+                SnackBarHelper.showError(context, error.toString());
               }
             },
             child: const Text('Thêm'),
@@ -222,24 +267,29 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
       if (!mounted) return;
 
       if (placeData.hasAnyData) {
-        setState(() => _applyExtractedPlaceData(placeData));
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Đã tự động điền thông tin từ Google Maps'),
-          ),
+        final review = placeData.review;
+        setState(() {
+          _applyExtractedPlaceData(placeData);
+          _extractionReview = review;
+          _showExtractionReview = review.needsManualReview;
+        });
+        SnackBarHelper.showSuccess(
+          context,
+          'Đã tự động điền thông tin từ Google Maps',
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Không tìm thấy thông tin trong link này'),
-          ),
+        setState(() {
+          _extractionReview = null;
+          _showExtractionReview = false;
+        });
+        SnackBarHelper.showError(
+          context,
+          'Không tìm thấy thông tin trong link này',
         );
       }
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Lỗi trích xuất link Google Maps')),
-      );
+      SnackBarHelper.showError(context, 'Lỗi trích xuất link Google Maps');
     } finally {
       if (mounted) setState(() => _isAutoFilling = false);
     }
@@ -248,6 +298,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
   void _applyExtractedPlaceData(GoogleMapsPlaceData data) {
     _updateField(_nameController, data.name);
     _updateField(_addressController, data.address);
+    _updateField(_priceRangeController, data.priceRange);
     _updateField(_openingHoursController, data.openingHours);
     _updateField(_phoneController, data.phone);
     _rating = data.rating ?? _rating;
@@ -255,9 +306,62 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     _longitude = data.longitude ?? _longitude;
   }
 
+  void _resetExtractionReview() {
+    if (_extractionReview == null && !_showExtractionReview) {
+      return;
+    }
+
+    setState(() {
+      _extractionReview = null;
+      _showExtractionReview = false;
+    });
+  }
+
   void _updateField(TextEditingController controller, String? value) {
     if (value == null || value.trim().isEmpty) return;
     controller.text = value.trim();
+  }
+
+  Future<void> _handleDuplicatePlaceConflict(
+    PlaceProvider placeProvider,
+    ApiException error, {
+    required Map<String, dynamic> draftPayload,
+  }) async {
+    final details = _DuplicatePlaceConflictDetails.fromApiException(error);
+    Place? duplicatePlace;
+
+    if (details.duplicatePlaceId != null) {
+      try {
+        duplicatePlace = await placeProvider.getPlaceById(
+          details.duplicatePlaceId!,
+        );
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
+
+    final action = await showDialog<_DuplicateConflictAction>(
+      context: context,
+      builder: (dialogContext) => _DuplicatePlaceConflictDialog(
+        message: error.message,
+        details: details,
+        duplicatePlace: duplicatePlace,
+        isEditing: _isEditing,
+      ),
+    );
+
+    if (!mounted ||
+        action != _DuplicateConflictAction.editExisting ||
+        duplicatePlace == null) {
+      return;
+    }
+
+    await Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) =>
+            AddPlaceScreen(place: duplicatePlace, prefilledDraft: draftPayload),
+      ),
+    );
   }
 
   Future<void> _save() async {
@@ -265,15 +369,14 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
 
     final categoryId = _selectedCategoryId;
     if (categoryId == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Please select a category')));
+      SnackBarHelper.showError(context, 'Vui lòng chọn danh mục');
       return;
     }
 
     final placeProvider = context.read<PlaceProvider>();
-    final messenger = ScaffoldMessenger.of(context);
+    final categoryProvider = context.read<CategoryProvider>();
     final navigator = Navigator.of(context);
+    final categoryName = categoryProvider.findById(categoryId)?.name;
 
     setState(() => _isSaving = true);
 
@@ -283,24 +386,62 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
         uploadedImageUrl = await _uploadImage(_selectedImage!);
       } catch (error) {
         if (!mounted) return;
-        messenger.showSnackBar(SnackBar(content: Text(error.toString())));
+        SnackBarHelper.showError(context, error.toString());
         setState(() => _isSaving = false);
         return;
       }
     }
 
     try {
+      final name = _nameController.text.trim();
+      final address = _addressController.text.trim();
+      final priceRange = _priceRangeController.text.trim();
+      final openingHours = _openingHoursController.text.trim();
+      final phone = _nullableText(_phoneController);
+      final mapsUrl = _nullableText(_mapsUrlController);
+      final note = _nullableText(_noteController);
+      final rating = _rating;
+
+      if (_isEditing) {
+        final p = widget.place!;
+        final hasChanges =
+            p.name != name ||
+            p.categoryId != categoryId ||
+            p.address != address ||
+            p.priceRange != priceRange ||
+            p.openingHours != openingHours ||
+            p.phone != phone ||
+            p.mapsUrl != mapsUrl ||
+            p.note != note ||
+            p.imageUrl != uploadedImageUrl ||
+            p.rating != rating ||
+            p.latitude != _latitude ||
+            p.longitude != _longitude;
+
+        if (!hasChanges) {
+          if (mounted) {
+            SnackBarHelper.showSuccess(
+              context,
+              'Không có thông tin được cập nhật',
+            );
+          }
+          navigator.pop();
+          return;
+        }
+      }
+
       final payload = {
-        'name': _nameController.text.trim(),
+        'name': name,
         'categoryId': categoryId,
-        'address': _addressController.text.trim(),
-        'priceRange': _nullableText(_priceRangeController),
-        'openingHours': _nullableText(_openingHoursController),
-        'phone': _nullableText(_phoneController),
-        'mapsUrl': _nullableText(_mapsUrlController),
-        'note': _nullableText(_noteController),
+        'categoryName': categoryName,
+        'address': address,
+        'priceRange': priceRange,
+        'openingHours': openingHours,
+        'phone': phone,
+        'mapsUrl': mapsUrl,
+        'note': note,
         'imageUrl': uploadedImageUrl,
-        'rating': _rating,
+        'rating': rating,
         'hasReminder': _isEditing ? widget.place!.hasReminder : false,
         'latitude': _latitude,
         'longitude': _longitude,
@@ -313,19 +454,38 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
       }
 
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            _isEditing
-                ? 'Cập nhật thông tin thành công'
-                : 'Place saved successfully',
-          ),
-        ),
+      SnackBarHelper.showSuccess(
+        context,
+        _isEditing
+            ? 'Cập nhật thông tin thành công'
+            : 'Đã lưu địa điểm thành công',
       );
       navigator.pop();
     } catch (error) {
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text(error.toString())));
+      if (error is ApiException && error.statusCode == 409) {
+        await _handleDuplicatePlaceConflict(
+          placeProvider,
+          error,
+          draftPayload: {
+            'name': _nameController.text.trim(),
+            'categoryId': _selectedCategoryId,
+            'categoryName': categoryName,
+            'address': _addressController.text.trim(),
+            'priceRange': _priceRangeController.text.trim(),
+            'openingHours': _openingHoursController.text.trim(),
+            'phone': _nullableText(_phoneController),
+            'mapsUrl': _nullableText(_mapsUrlController),
+            'note': _nullableText(_noteController),
+            'imageUrl': uploadedImageUrl,
+            'rating': _rating,
+            'latitude': _latitude,
+            'longitude': _longitude,
+          },
+        );
+        return;
+      }
+      SnackBarHelper.showError(context, error.toString());
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -336,10 +496,24 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     return value.isEmpty ? null : value;
   }
 
+  String? _draftString(Object? value) {
+    if (value is! String) return null;
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  double? _draftDouble(Object? value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value.trim());
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_isEditing ? 'Update Place' : 'Add Place')),
+      appBar: AppBar(
+        title: Text(_isEditing ? 'Cập nhật địa điểm' : 'Thêm địa điểm'),
+      ),
       body: SafeArea(
         child: Consumer<CategoryProvider>(
           builder: (context, categoryProvider, _) {
@@ -359,16 +533,22 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                 ),
                 children: [
                   Text(
-                    _isEditing ? 'Update saved place' : 'Save somewhere new',
+                    _isEditing
+                        ? 'Cập nhật địa điểm đã lưu'
+                        : 'Lưu địa điểm mới',
                     style: AppTextStyles.headline,
                   ),
                   const SizedBox(height: 8),
                   Text(
                     _isEditing
-                        ? 'Edit details and sync changes to Roamy Backend.'
-                        : 'Add details and sync them to Roamy Backend.',
+                        ? 'Chỉnh sửa chi tiết và đồng bộ với hệ thống.'
+                        : 'Thêm chi tiết và đồng bộ với hệ thống.',
                     style: AppTextStyles.subtitle,
                   ),
+                  if (_isDuplicateResolutionMode) ...[
+                    const SizedBox(height: 16),
+                    const _DuplicateResolutionBanner(),
+                  ],
                   const SizedBox(height: 24),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -376,9 +556,10 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                       Expanded(
                         child: _Input(
                           controller: _mapsUrlController,
-                          label: 'Google Maps link',
+                          label: 'Liên kết Google Maps',
                           icon: Icons.link_rounded,
                           requiredField: false,
+                          onChanged: (_) => _resetExtractionReview(),
                         ),
                       ),
                       Padding(
@@ -399,14 +580,20 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                           onPressed: _isAutoFilling
                               ? null
                               : _autoFillFromMapsUrl,
-                          tooltip: 'Auto-fill info',
+                          tooltip: 'Tự động điền thông tin',
                         ),
                       ),
                     ],
                   ),
+                  if (_showExtractionReview && _extractionReview != null)
+                    _ExtractionReviewCard(
+                      review: _extractionReview!,
+                      onDismiss: () =>
+                          setState(() => _showExtractionReview = false),
+                    ),
                   _Input(
                     controller: _nameController,
-                    label: 'Place name',
+                    label: 'Tên địa điểm',
                     icon: Icons.place_rounded,
                   ),
                   Row(
@@ -416,7 +603,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                         child: DropdownButtonFormField<String>(
                           initialValue: _selectedCategoryId,
                           decoration: const InputDecoration(
-                            labelText: 'Category',
+                            labelText: 'Danh mục',
                             prefixIcon: Icon(Icons.sell_rounded),
                           ),
                           items: categoryProvider.categories
@@ -428,7 +615,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                               )
                               .toList(),
                           validator: (value) =>
-                              value == null ? 'Category is required' : null,
+                              value == null ? 'Vui lòng chọn danh mục' : null,
                           onChanged: (value) =>
                               setState(() => _selectedCategoryId = value),
                         ),
@@ -446,33 +633,31 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                   const SizedBox(height: 14),
                   _Input(
                     controller: _addressController,
-                    label: 'Address',
+                    label: 'Địa chỉ',
                     icon: Icons.location_on_rounded,
                   ),
                   _Input(
                     controller: _priceRangeController,
-                    label: 'Price range',
+                    label: 'Khoảng giá',
                     icon: Icons.payments_rounded,
                     requiredField: false,
                   ),
                   _Input(
                     controller: _openingHoursController,
-                    label: 'Opening hours',
+                    label: 'Giờ mở cửa',
                     icon: Icons.schedule_rounded,
                     requiredField: false,
                   ),
                   _Input(
                     controller: _phoneController,
-                    label: 'Phone number',
+                    label: 'Số điện thoại',
                     icon: Icons.phone_rounded,
                     keyboardType: TextInputType.phone,
                     requiredField: false,
                   ),
                   const Text(
-                    'Place Image',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    'Hình ảnh địa điểm',
+                    style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   if (_selectedImage != null)
@@ -491,9 +676,9 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                           right: 8,
                           top: 8,
                           child: CircleAvatar(
-                            backgroundColor: Theme.of(context).colorScheme.surface.withValues(
-                              alpha: 0.8,
-                            ),
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.surface.withValues(alpha: 0.8),
                             child: IconButton(
                               icon: Icon(
                                 Icons.edit_rounded,
@@ -521,13 +706,15 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                                   height: 120,
                                   width: double.infinity,
                                   alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.surface,
-                                  border: Border.all(
-                                    color: Theme.of(context).dividerColor,
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.surface,
+                                    border: Border.all(
+                                      color: Theme.of(context).dividerColor,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
                                   child: const Icon(
                                     Icons.broken_image_rounded,
                                     color: Colors.grey,
@@ -539,9 +726,9 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                           right: 8,
                           top: 8,
                           child: CircleAvatar(
-                            backgroundColor: Theme.of(context).colorScheme.surface.withValues(
-                              alpha: 0.8,
-                            ),
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.surface.withValues(alpha: 0.8),
                             child: IconButton(
                               icon: Icon(
                                 Icons.edit_rounded,
@@ -561,7 +748,9 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                         width: double.infinity,
                         decoration: BoxDecoration(
                           color: Theme.of(context).colorScheme.surface,
-                          border: Border.all(color: Theme.of(context).dividerColor),
+                          border: Border.all(
+                            color: Theme.of(context).dividerColor,
+                          ),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Column(
@@ -574,7 +763,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                             ),
                             SizedBox(height: 8),
                             Text(
-                              'Select Image',
+                              'Chọn hình ảnh',
                               style: TextStyle(color: Colors.grey),
                             ),
                           ],
@@ -584,7 +773,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                   const SizedBox(height: 14),
                   _Input(
                     controller: _noteController,
-                    label: 'Personal note',
+                    label: 'Ghi chú cá nhân',
                     icon: Icons.edit_note_rounded,
                     maxLines: 4,
                     requiredField: false,
@@ -600,19 +789,379 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                     ),
                   PrimaryButton(
                     label: _isSaving
-                        ? 'Saving...'
-                        : (_isEditing ? 'Update place' : 'Save place'),
+                        ? 'Đang lưu...'
+                        : (_isEditing ? 'Cập nhật địa điểm' : 'Lưu địa điểm'),
                     icon: Icons.check_rounded,
                     onPressed: _isSaving ? () {} : _save,
                   ),
-                  SizedBox(
-                    height: MediaQuery.of(context).padding.bottom + 24,
-                  ),
+                  SizedBox(height: MediaQuery.of(context).padding.bottom + 24),
                 ],
               ),
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+enum _DuplicateConflictAction { stay, editExisting }
+
+class _DuplicatePlaceConflictDetails {
+  const _DuplicatePlaceConflictDetails({
+    this.duplicatePlaceId,
+    this.duplicateReason,
+  });
+
+  final String? duplicatePlaceId;
+  final String? duplicateReason;
+
+  factory _DuplicatePlaceConflictDetails.fromApiException(ApiException error) {
+    final details = error.details;
+    if (details is! Map<String, dynamic>) {
+      return const _DuplicatePlaceConflictDetails();
+    }
+
+    return _DuplicatePlaceConflictDetails(
+      duplicatePlaceId: _readNonEmptyString(details['duplicatePlaceId']),
+      duplicateReason: _readNonEmptyString(details['duplicateReason']),
+    );
+  }
+
+  String? get reasonLabel {
+    switch (duplicateReason) {
+      case 'maps-url':
+        return 'Trung lien ket Google Maps';
+      case 'coordinates':
+        return 'Trung ten va vi tri ban do';
+      case 'name-address':
+        return 'Trung ten va dia chi';
+      default:
+        return null;
+    }
+  }
+}
+
+class _DuplicateResolutionBanner extends StatelessWidget {
+  const _DuplicateResolutionBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.orange.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppSpacing.radius),
+        border: Border.all(color: AppColors.orange.withValues(alpha: 0.24)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.merge_type_rounded, color: AppColors.orange),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Dang xu ly duplicate place',
+                  style: AppTextStyles.title.copyWith(fontSize: 18),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'Form nay dang dung du lieu vua nhap de cap nhat dia diem da co, giup ban hop nhat thong tin ma khong phai nhap lai.',
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DuplicatePlaceConflictDialog extends StatelessWidget {
+  const _DuplicatePlaceConflictDialog({
+    required this.message,
+    required this.details,
+    required this.duplicatePlace,
+    required this.isEditing,
+  });
+
+  final String message;
+  final _DuplicatePlaceConflictDetails? details;
+  final Place? duplicatePlace;
+  final bool isEditing;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final place = duplicatePlace;
+
+    return AlertDialog(
+      titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+      contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      title: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.orange.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.copy_all_rounded,
+              color: AppColors.orange,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Text(
+              isEditing
+                  ? 'Co dia diem khac dang trung'
+                  : 'Dia diem nay da ton tai',
+            ),
+          ),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(message, style: AppTextStyles.body),
+            if (details?.reasonLabel != null) ...[
+              const SizedBox(height: AppSpacing.md),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.md,
+                  vertical: AppSpacing.sm,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.primarySoft,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  details!.reasonLabel!,
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.primaryDark,
+                  ),
+                ),
+              ),
+            ],
+            if (place != null) ...[
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                'Dia diem dang co trong he thong',
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(AppSpacing.radius),
+                  border: Border.all(color: theme.dividerColor),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(place.name, style: AppTextStyles.title),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      place.address,
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.sell_rounded,
+                          size: 16,
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        Text(place.category, style: AppTextStyles.caption),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () =>
+              Navigator.of(context).pop(_DuplicateConflictAction.stay),
+          child: const Text('Quay lai form'),
+        ),
+        if (place != null)
+          FilledButton.icon(
+            onPressed: () => Navigator.of(
+              context,
+            ).pop(_DuplicateConflictAction.editExisting),
+            icon: const Icon(Icons.edit_location_alt_rounded),
+            label: Text(
+              isEditing ? 'Mo dia diem kia' : 'Cap nhat dia diem da co',
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _ExtractionReviewCard extends StatelessWidget {
+  const _ExtractionReviewCard({required this.review, required this.onDismiss});
+
+  final GoogleMapsExtractionReview review;
+  final VoidCallback onDismiss;
+
+  Color _accentColor() {
+    switch (review.confidence) {
+      case GoogleMapsExtractionConfidence.low:
+        return AppColors.red;
+      case GoogleMapsExtractionConfidence.medium:
+        return AppColors.orange;
+      case GoogleMapsExtractionConfidence.high:
+        return AppColors.green;
+    }
+  }
+
+  IconData _icon() {
+    switch (review.confidence) {
+      case GoogleMapsExtractionConfidence.low:
+        return Icons.warning_amber_rounded;
+      case GoogleMapsExtractionConfidence.medium:
+        return Icons.rule_rounded;
+      case GoogleMapsExtractionConfidence.high:
+        return Icons.verified_rounded;
+    }
+  }
+
+  String _title() {
+    switch (review.confidence) {
+      case GoogleMapsExtractionConfidence.low:
+        return 'Can bo sung thu cong';
+      case GoogleMapsExtractionConfidence.medium:
+        return 'Nen kiem tra lai truoc khi luu';
+      case GoogleMapsExtractionConfidence.high:
+        return 'Du lieu Google Maps kha day du';
+    }
+  }
+
+  String _subtitle() {
+    switch (review.confidence) {
+      case GoogleMapsExtractionConfidence.low:
+        return 'Link nay chi tra ve mot phan thong tin.';
+      case GoogleMapsExtractionConfidence.medium:
+        return 'Da autofill duoc du lieu co ban, nhung van nen doi chieu.';
+      case GoogleMapsExtractionConfidence.high:
+        return 'Du lieu da du de luu.';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = _accentColor();
+    final theme = Theme.of(context);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: Color.alphaBlend(
+          accent.withValues(alpha: 0.08),
+          theme.colorScheme.surface,
+        ),
+        borderRadius: BorderRadius.circular(AppSpacing.radius),
+        border: Border.all(color: accent.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.14),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(_icon(), color: accent, size: 20),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_title(), style: AppTextStyles.title),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      '${_subtitle()} ${(review.score * 100).round()}% tin cay.',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: onDismiss,
+                icon: const Icon(Icons.close_rounded, size: 18),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+          if (review.capturedFields.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              'Da lay duoc: ${review.capturedFields.join(', ')}',
+              style: AppTextStyles.body.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+              ),
+            ),
+          ],
+          if (review.issues.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.md),
+            for (final issue in review.issues)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: accent,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(child: Text(issue, style: AppTextStyles.body)),
+                  ],
+                ),
+              ),
+          ],
+        ],
       ),
     );
   }
@@ -626,6 +1175,7 @@ class _Input extends StatelessWidget {
     this.maxLines = 1,
     this.keyboardType,
     this.requiredField = true,
+    this.onChanged,
   });
 
   final TextEditingController controller;
@@ -634,6 +1184,7 @@ class _Input extends StatelessWidget {
   final int maxLines;
   final TextInputType? keyboardType;
   final bool requiredField;
+  final ValueChanged<String>? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -643,10 +1194,11 @@ class _Input extends StatelessWidget {
         controller: controller,
         maxLines: maxLines,
         keyboardType: keyboardType,
+        onChanged: onChanged,
         validator: (value) {
           if (!requiredField) return null;
           if (value == null || value.trim().isEmpty) {
-            return '$label is required';
+            return '$label không được để trống';
           }
           return null;
         },
@@ -654,4 +1206,10 @@ class _Input extends StatelessWidget {
       ),
     );
   }
+}
+
+String? _readNonEmptyString(Object? value) {
+  if (value is! String) return null;
+  final trimmed = value.trim();
+  return trimmed.isEmpty ? null : trimmed;
 }

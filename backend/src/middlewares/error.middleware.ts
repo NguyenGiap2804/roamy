@@ -13,23 +13,27 @@ export function notFoundHandler(req: Request, res: Response) {
 
 export function errorMiddleware(
   error: Error,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction,
 ) {
   const isProduction = process.env.NODE_ENV === "production";
+  logServerError(req, error);
 
   if (error instanceof AppError) {
+    const isServerError = error.statusCode >= 500;
     return res.status(error.statusCode).json({
-      data: error.details ?? null,
-      message: error.message,
+      data: isProduction && isServerError
+          ? null
+          : sanitizeErrorDetails(error.details, isProduction),
+      message: isProduction && isServerError
+          ? "Internal server error"
+          : error.message,
       status: error.statusCode,
     });
   }
 
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    console.error(error);
-
     return res.status(400).json({
       data: null,
       message: "Database request failed",
@@ -59,4 +63,47 @@ export function errorMiddleware(
   }
 
   return res.status(500).json(responseBody);
+}
+
+function logServerError(req: Request, error: Error) {
+  const statusCode =
+    error instanceof AppError
+      ? error.statusCode
+      : error instanceof Prisma.PrismaClientKnownRequestError
+      ? 400
+      : 500;
+
+  console.error("[Roamy API Error]", {
+    method: req.method,
+    url: req.originalUrl,
+    statusCode,
+    name: error.name,
+    message: error.message,
+    stack: error.stack,
+    details: error instanceof AppError ? error.details : undefined,
+  });
+}
+
+function sanitizeErrorDetails(details: unknown, isProduction: boolean): unknown {
+  if (!isProduction || details == null) {
+    return details ?? null;
+  }
+
+  if (Array.isArray(details)) {
+    return details.map((item) => sanitizeErrorDetails(item, true));
+  }
+
+  if (typeof details === "object") {
+    const objectDetails = details as Record<string, unknown>;
+    const sanitizedEntries = Object.entries(objectDetails)
+      .filter(([key]) => !isInternalErrorField(key))
+      .map(([key, value]) => [key, sanitizeErrorDetails(value, true)]);
+    return Object.fromEntries(sanitizedEntries);
+  }
+
+  return details;
+}
+
+function isInternalErrorField(key: string) {
+  return key === "stack" || key === "stackTrace" || key === "errorName";
 }

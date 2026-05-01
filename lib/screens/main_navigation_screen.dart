@@ -46,22 +46,22 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home_rounded),
-            label: 'Home',
+            label: 'Trang chủ',
           ),
           NavigationDestination(
             icon: Icon(Icons.calendar_month_outlined),
             selectedIcon: Icon(Icons.calendar_month_rounded),
-            label: 'Calendar',
+            label: 'Lịch trình',
           ),
           NavigationDestination(
             icon: Icon(Icons.grid_view_outlined),
             selectedIcon: Icon(Icons.grid_view_rounded),
-            label: 'Categories',
+            label: 'Danh mục',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline_rounded),
             selectedIcon: Icon(Icons.person_rounded),
-            label: 'Me',
+            label: 'Tôi',
           ),
         ],
       ),
@@ -73,7 +73,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 );
               },
               icon: const Icon(Icons.add_location_alt_rounded),
-              label: const Text('Add place'),
+              label: const Text('Thêm địa điểm'),
             )
           : null,
     );
@@ -89,10 +89,10 @@ class _MeScreen extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.all(AppSpacing.xl),
         children: [
-          Text('Hello, Nguyên Giáp', style: AppTextStyles.headline),
+          Text('Xin chào, Nguyên Giáp', style: AppTextStyles.headline),
           const SizedBox(height: 8),
           const Text(
-            'Plan your next trip with Roamy',
+            'Lên kế hoạch cho chuyến đi tiếp theo cùng Roamy',
             style: AppTextStyles.subtitle,
           ),
           const SizedBox(height: 24),
@@ -109,10 +109,10 @@ class _MeScreen extends StatelessWidget {
                 Icon(Icons.explore_rounded, color: AppColors.primary, size: 34),
                 SizedBox(height: 14),
                 Text(
-                  'Roamy keeps your saved places, notes, and future plans in one calm workspace.',
+                  'Roamy giúp bạn lưu giữ các địa điểm, ghi chú và kế hoạch tương lai trong một không gian tối giản.',
                 ),
                 SizedBox(height: 12),
-                Text('Connected to Roamy Backend with local API data.'),
+                Text('Đã kết nối với hệ thống Roamy Backend.'),
               ],
             ),
           ),

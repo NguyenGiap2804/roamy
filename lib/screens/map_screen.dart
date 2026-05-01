@@ -14,8 +14,8 @@ class MapScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(place.name),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        foregroundColor: Theme.of(context).colorScheme.onSurface,
         elevation: 0,
       ),
       body: place.hasCoordinates
@@ -65,10 +65,10 @@ class _MissingLocationState extends StatelessWidget {
               color: AppColors.primary,
             ),
             const SizedBox(height: 14),
-            Text('Location not available', style: AppTextStyles.title),
+            Text('Vị trí chưa sẵn có', style: AppTextStyles.title),
             const SizedBox(height: 6),
-            Text(
-              'This place does not have coordinates yet.',
+            const Text(
+              'Địa điểm này hiện chưa có tọa độ trên bản đồ.',
               style: AppTextStyles.caption,
               textAlign: TextAlign.center,
             ),

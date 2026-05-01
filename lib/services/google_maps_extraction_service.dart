@@ -3,6 +3,30 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../core/utils/coordinates.dart';
+
+enum GoogleMapsExtractionConfidence { low, medium, high }
+
+class GoogleMapsExtractionReview {
+  GoogleMapsExtractionReview({
+    required this.confidence,
+    required this.score,
+    required List<String> issues,
+    required List<String> capturedFields,
+  }) : issues = List.unmodifiable(issues),
+       capturedFields = List.unmodifiable(capturedFields);
+
+  final GoogleMapsExtractionConfidence confidence;
+  final double score;
+  final List<String> issues;
+  final List<String> capturedFields;
+
+  bool get needsManualReview {
+    return confidence != GoogleMapsExtractionConfidence.high ||
+        issues.isNotEmpty;
+  }
+}
+
 class GoogleMapsPlaceData {
   const GoogleMapsPlaceData({
     this.name,
@@ -23,6 +47,70 @@ class GoogleMapsPlaceData {
   final double? rating;
   final double? latitude;
   final double? longitude;
+
+  GoogleMapsExtractionReview get review {
+    final hasName = _clean(name) != null;
+    final hasAddress = _clean(address) != null;
+    final hasPriceRange = _clean(priceRange) != null;
+    final hasOpeningHours = _clean(openingHours) != null;
+    final hasPhone = _clean(phone) != null;
+    final hasRating = rating != null && rating! >= 1 && rating! <= 5;
+    final hasCoordinates = hasUsableCoordinates(latitude, longitude);
+
+    var score = 0.0;
+    if (hasName) score += 0.32;
+    if (hasAddress) score += 0.24;
+    if (hasCoordinates) score += 0.24;
+    if (hasOpeningHours) score += 0.08;
+    if (hasPhone) score += 0.06;
+    if (hasPriceRange) score += 0.04;
+    if (hasRating) score += 0.02;
+
+    final capturedFields = <String>[];
+    if (hasName) capturedFields.add('Ten');
+    if (hasAddress) capturedFields.add('Dia chi');
+    if (hasCoordinates) capturedFields.add('Toa do');
+    if (hasOpeningHours) capturedFields.add('Gio mo cua');
+    if (hasPhone) capturedFields.add('So dien thoai');
+    if (hasPriceRange) capturedFields.add('Khoang gia');
+    if (hasRating) capturedFields.add('Danh gia');
+
+    final issues = <String>[];
+    if (!hasName) {
+      issues.add('Ten dia diem chua duoc trich xuat.');
+    }
+    if (!hasAddress) {
+      issues.add('Dia chi chua du ro rang.');
+    }
+    if (!hasCoordinates) {
+      issues.add('Chua lay duoc toa do chinh xac de mo ban do.');
+    }
+
+    final optionalFieldCount = [
+      hasOpeningHours,
+      hasPhone,
+      hasPriceRange,
+      hasRating,
+    ].where((value) => value).length;
+    if ((hasName || hasAddress) && optionalFieldCount == 0) {
+      issues.add(
+        'Link nay chi tra ve du lieu co ban. Nen doi chieu them gio mo cua, gia va lien he truoc khi luu.',
+      );
+    }
+
+    final confidence = score >= 0.8
+        ? GoogleMapsExtractionConfidence.high
+        : score >= 0.55
+        ? GoogleMapsExtractionConfidence.medium
+        : GoogleMapsExtractionConfidence.low;
+
+    return GoogleMapsExtractionReview(
+      confidence: confidence,
+      score: double.parse(score.toStringAsFixed(2)),
+      issues: issues,
+      capturedFields: capturedFields,
+    );
+  }
 
   bool get hasAnyData {
     return name != null ||
@@ -65,7 +153,10 @@ class GoogleMapsExtractionService {
           .timeout(_timeout);
       final responseUri = response.request?.url ?? currentUri;
       data = _extractFromUri(responseUri).merge(data);
-      data = _extractFromHtml(response.body, responseUri).merge(data);
+      data = extractFromHtmlBody(
+        response.body,
+        baseUri: responseUri,
+      ).merge(data);
 
       final previewUri = _findPreviewUri(response.body, responseUri);
       if (previewUri != null) {
@@ -90,7 +181,7 @@ class GoogleMapsExtractionService {
         }
 
         final body = await response.stream.bytesToString();
-        data = _extractFromHtml(body, currentUri).merge(data);
+        data = extractFromHtmlBody(body, baseUri: currentUri).merge(data);
 
         final previewUri = _findPreviewUri(body, currentUri);
         if (previewUri != null) {
@@ -108,6 +199,13 @@ class GoogleMapsExtractionService {
     } finally {
       client.close();
     }
+  }
+
+  GoogleMapsPlaceData extractFromHtmlBody(String body, {Uri? baseUri}) {
+    return _extractFromHtml(
+      body,
+      baseUri ?? Uri.parse('https://www.google.com/maps'),
+    );
   }
 
   GoogleMapsPlaceData extractFromPreviewBody(String body) {
@@ -148,10 +246,18 @@ class GoogleMapsExtractionService {
   };
 
   GoogleMapsPlaceData _extractFromHtml(String body, Uri baseUri) {
+    final decodedBody = _decodeGoogleEscapes(_decodeHtmlEntities(body));
+    var data = _extractStructuredData(decodedBody);
+
     final previewUri = _findPreviewUri(body, baseUri);
-    var data = previewUri == null
-        ? const GoogleMapsPlaceData()
-        : _extractFromUri(previewUri);
+    if (previewUri != null) {
+      data = data.merge(_extractFromUri(previewUri));
+    }
+
+    final deepLinkUri = _findDeepLinkUri(decodedBody, baseUri);
+    if (deepLinkUri != null) {
+      data = data.merge(_extractFromUri(deepLinkUri));
+    }
 
     final staticMapMatch = RegExp(
       r'center=([-.\d]+)%2C([-.\d]+)',
@@ -239,6 +345,20 @@ class GoogleMapsExtractionService {
     if (match == null) return null;
 
     final href = _decodeHtmlEntities(match.group(1)!);
+    if (href.startsWith('/maps/')) {
+      return Uri.parse('https://www.google.com$href');
+    }
+    return baseUri.resolve(href);
+  }
+
+  Uri? _findDeepLinkUri(String body, Uri baseUri) {
+    final match = RegExp(
+      r'''window\.ES5DGURL\s*=\s*["']([^"']+)["']''',
+      caseSensitive: false,
+    ).firstMatch(body);
+    if (match == null) return null;
+
+    final href = _decodeHtmlEntities(_decodeGoogleEscapes(match.group(1)!));
     if (href.startsWith('/maps/')) {
       return Uri.parse('https://www.google.com$href');
     }
@@ -672,6 +792,243 @@ class GoogleMapsExtractionService {
         .replaceAll('&amp;', '&')
         .replaceAll('&quot;', '"')
         .replaceAll('&#39;', "'");
+  }
+
+  GoogleMapsPlaceData _extractStructuredData(String body) {
+    final matches = RegExp(
+      r'''<script[^>]+type=["']application/ld\+json["'][^>]*>([\s\S]*?)</script>''',
+      caseSensitive: false,
+    ).allMatches(body);
+
+    var data = const GoogleMapsPlaceData();
+    for (final match in matches) {
+      data = data.merge(_extractStructuredDataBlock(match.group(1)!));
+      if (data.hasAnyData) {
+        return data;
+      }
+    }
+
+    return data;
+  }
+
+  GoogleMapsPlaceData _extractStructuredDataBlock(String rawBlock) {
+    final block = rawBlock.replaceAll(RegExp(r'<!--|-->'), '').trim();
+    if (block.isEmpty) return const GoogleMapsPlaceData();
+
+    try {
+      final decoded = jsonDecode(block);
+      final placeNode = _findStructuredPlaceNode(decoded);
+      if (placeNode == null) return const GoogleMapsPlaceData();
+
+      final rawPriceRange = _clean(placeNode['priceRange']?.toString());
+
+      return GoogleMapsPlaceData(
+        name: _sanitizePlaceName(placeNode['name']?.toString()),
+        address: _structuredAddress(placeNode['address']),
+        priceRange:
+            _normalizePriceRange(rawPriceRange) ?? _clean(rawPriceRange),
+        openingHours: _structuredOpeningHours(placeNode),
+        phone: _clean(placeNode['telephone']?.toString()),
+        rating: _structuredRating(placeNode['aggregateRating']),
+        latitude:
+            _structuredCoordinate(placeNode['geo'], 'latitude') ??
+            _asDouble(placeNode['latitude']),
+        longitude:
+            _structuredCoordinate(placeNode['geo'], 'longitude') ??
+            _asDouble(placeNode['longitude']),
+      );
+    } catch (_) {
+      return const GoogleMapsPlaceData();
+    }
+  }
+
+  Map<String, dynamic>? _findStructuredPlaceNode(dynamic value) {
+    if (value is Map<String, dynamic>) {
+      if (_isStructuredPlaceCandidate(value)) {
+        return value;
+      }
+
+      final graph = _findStructuredPlaceNode(value['@graph']);
+      if (graph != null) return graph;
+
+      for (final nestedValue in value.values) {
+        final nested = _findStructuredPlaceNode(nestedValue);
+        if (nested != null) return nested;
+      }
+    }
+
+    if (value is List) {
+      for (final item in value) {
+        final nested = _findStructuredPlaceNode(item);
+        if (nested != null) return nested;
+      }
+    }
+
+    return null;
+  }
+
+  bool _isStructuredPlaceCandidate(Map<String, dynamic> value) {
+    final typeNames = _structuredTypeNames(value['@type']);
+    final hasPlaceType = typeNames.any((type) {
+      final lower = type.toLowerCase();
+      return lower.contains('place') ||
+          lower.contains('business') ||
+          lower.contains('restaurant') ||
+          lower.contains('cafe') ||
+          lower.contains('store') ||
+          lower.contains('hotel') ||
+          lower.contains('museum') ||
+          lower.contains('park') ||
+          lower.contains('bar') ||
+          lower.contains('lodging') ||
+          lower.contains('touristattraction');
+    });
+
+    final hasSignals =
+        value['name'] != null &&
+        (value.containsKey('address') ||
+            value.containsKey('geo') ||
+            value.containsKey('priceRange') ||
+            value.containsKey('openingHours') ||
+            value.containsKey('openingHoursSpecification') ||
+            value.containsKey('telephone') ||
+            value.containsKey('aggregateRating'));
+
+    return hasPlaceType || hasSignals;
+  }
+
+  List<String> _structuredTypeNames(dynamic value) {
+    if (value is String) return [value];
+    if (value is List) {
+      return value.map((item) => item.toString()).toList();
+    }
+    return const [];
+  }
+
+  String? _sanitizePlaceName(String? value) {
+    final cleaned = _clean(value);
+    if (cleaned == null) return null;
+    if (cleaned.toLowerCase() == 'google maps') return null;
+    return cleaned;
+  }
+
+  String? _structuredAddress(dynamic value) {
+    if (value is String) return _clean(value);
+
+    if (value is List) {
+      final parts = value
+          .map(_structuredAddress)
+          .whereType<String>()
+          .where((part) => part.isNotEmpty)
+          .toList();
+      if (parts.isEmpty) return null;
+      return parts.join(', ');
+    }
+
+    if (value is Map<String, dynamic>) {
+      final country = value['addressCountry'];
+      final orderedParts = <String>[];
+
+      void append(dynamic part) {
+        final cleaned = _clean(part?.toString());
+        if (cleaned == null || orderedParts.contains(cleaned)) return;
+        orderedParts.add(cleaned);
+      }
+
+      append(value['streetAddress']);
+      append(value['addressLocality']);
+      append(value['addressRegion']);
+      append(value['postalCode']);
+      if (country is Map<String, dynamic>) {
+        append(country['name']);
+      } else {
+        append(country);
+      }
+
+      if (orderedParts.isEmpty) return null;
+      return orderedParts.join(', ');
+    }
+
+    return null;
+  }
+
+  String? _structuredOpeningHours(Map<String, dynamic> value) {
+    final openingHours = value['openingHours'];
+    final inline = _structuredOpeningHoursValue(openingHours);
+    if (inline != null) return inline;
+
+    final specifications = value['openingHoursSpecification'];
+    if (specifications is! List) return null;
+
+    final segments = <String>[];
+    for (final spec in specifications.whereType<Map<String, dynamic>>()) {
+      final opens = _clean(spec['opens']?.toString());
+      final closes = _clean(spec['closes']?.toString());
+      if (opens == null || closes == null) continue;
+
+      final range = '$opens - $closes';
+      final dayLabel = _structuredDayLabel(spec['dayOfWeek']);
+      final segment = dayLabel == null ? range : '$dayLabel: $range';
+      if (!segments.contains(segment)) {
+        segments.add(segment);
+      }
+    }
+
+    if (segments.isEmpty) return null;
+    if (segments.length == 1) {
+      final single = segments.first;
+      final index = single.indexOf(': ');
+      return index == -1 ? single : single.substring(index + 2);
+    }
+    return segments.join('; ');
+  }
+
+  String? _structuredOpeningHoursValue(dynamic value) {
+    if (value is String) return _clean(value);
+    if (value is List) {
+      final parts = value
+          .map((item) => _clean(item?.toString()))
+          .whereType<String>()
+          .toList();
+      if (parts.isEmpty) return null;
+      return parts.join(', ');
+    }
+    return null;
+  }
+
+  String? _structuredDayLabel(dynamic value) {
+    if (value is String) {
+      return _clean(value.split('/').last);
+    }
+
+    if (value is List) {
+      final days = value
+          .map((item) => _clean(item?.toString().split('/').last))
+          .whereType<String>()
+          .toList();
+      if (days.isEmpty) return null;
+      return days.join(', ');
+    }
+
+    return null;
+  }
+
+  double? _structuredRating(dynamic value) {
+    if (value is Map<String, dynamic>) {
+      return _asDouble(value['ratingValue']);
+    }
+    return _asDouble(value);
+  }
+
+  double? _structuredCoordinate(dynamic value, String key) {
+    if (value is! Map<String, dynamic>) return null;
+    return _asDouble(value[key]);
+  }
+
+  double? _asDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value.trim());
+    return null;
   }
 }
 

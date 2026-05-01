@@ -1,3 +1,5 @@
+import '../core/utils/coordinates.dart';
+
 class Place {
   const Place({
     required this.id,
@@ -15,6 +17,7 @@ class Place {
     this.categoryName,
     this.latitude,
     this.longitude,
+    this.isPendingSync = false,
   });
 
   final String id;
@@ -32,6 +35,7 @@ class Place {
   final String? categoryName;
   final double? latitude;
   final double? longitude;
+  final bool isPendingSync;
 
   factory Place.fromJson(Map<String, dynamic> json) {
     final category = json['category'];
@@ -57,6 +61,7 @@ class Place {
       longitude: json['longitude'] != null
           ? (json['longitude'] as num).toDouble()
           : null,
+      isPendingSync: false,
     );
   }
 
@@ -78,12 +83,58 @@ class Place {
     };
   }
 
+  Place copyWith({
+    String? id,
+    String? name,
+    String? categoryId,
+    String? address,
+    String? priceRange,
+    String? openingHours,
+    Object? phone = _unset,
+    Object? mapsUrl = _unset,
+    Object? note = _unset,
+    Object? imageUrl = _unset,
+    double? rating,
+    bool? hasReminder,
+    Object? categoryName = _unset,
+    Object? latitude = _unset,
+    Object? longitude = _unset,
+    bool? isPendingSync,
+  }) {
+    return Place(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      categoryId: categoryId ?? this.categoryId,
+      address: address ?? this.address,
+      priceRange: priceRange ?? this.priceRange,
+      openingHours: openingHours ?? this.openingHours,
+      phone: identical(phone, _unset) ? this.phone : phone as String?,
+      mapsUrl: identical(mapsUrl, _unset) ? this.mapsUrl : mapsUrl as String?,
+      note: identical(note, _unset) ? this.note : note as String?,
+      imageUrl: identical(imageUrl, _unset)
+          ? this.imageUrl
+          : imageUrl as String?,
+      rating: rating ?? this.rating,
+      hasReminder: hasReminder ?? this.hasReminder,
+      categoryName: identical(categoryName, _unset)
+          ? this.categoryName
+          : categoryName as String?,
+      latitude: identical(latitude, _unset)
+          ? this.latitude
+          : latitude as double?,
+      longitude: identical(longitude, _unset)
+          ? this.longitude
+          : longitude as double?,
+      isPendingSync: isPendingSync ?? this.isPendingSync,
+    );
+  }
+
   String get category => categoryName ?? 'Other';
   bool get hasPriceRange => priceRange.trim().isNotEmpty;
   bool get hasOpeningHours => openingHours.trim().isNotEmpty;
   bool get hasPhone => phone?.trim().isNotEmpty == true;
   bool get hasMapsUrl => mapsUrl?.trim().isNotEmpty == true;
-  bool get hasCoordinates => latitude != null && longitude != null;
+  bool get hasCoordinates => hasUsableCoordinates(latitude, longitude);
   String get safePhone => phone?.isNotEmpty == true ? phone! : 'Not added yet';
   String get safeMapsUrl =>
       mapsUrl?.isNotEmpty == true ? mapsUrl! : 'Not added yet';
@@ -91,3 +142,5 @@ class Place {
       note?.isNotEmpty == true ? note! : 'No personal note yet.';
   String get safeImageUrl => imageUrl ?? '';
 }
+
+const Object _unset = Object();

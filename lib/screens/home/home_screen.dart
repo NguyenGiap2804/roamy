@@ -23,7 +23,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String _selectedCategory = 'All';
+  String _selectedCategory = 'Tất cả';
   String _searchQuery = '';
 
   @override
@@ -38,7 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Place> _filteredPlaces(List<Place> places) {
     return places.where((place) {
       final matchesCategory =
-          _selectedCategory == 'All' || place.category == _selectedCategory;
+          _selectedCategory == 'Tất cả' || place.category == _selectedCategory;
       final query = _searchQuery.trim().toLowerCase();
       final matchesSearch =
           query.isEmpty ||
@@ -54,7 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Consumer2<PlaceProvider, CategoryProvider>(
         builder: (context, placeProvider, categoryProvider, _) {
           final categories = [
-            'All',
+            'Tất cả',
             ...categoryProvider.categories.map((category) => category.name),
           ];
           final places = _filteredPlaces(placeProvider.places);
@@ -78,12 +78,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Hello, Nguyên Giáp 👋',
+                                'Xin chào, Nguyên Giáp 👋',
                                 style: AppTextStyles.headline,
                               ),
                               const SizedBox(height: 8),
                               const Text(
-                                'Where do you want to go next?',
+                                'Bạn muốn đi đâu tiếp theo?',
                                 style: AppTextStyles.subtitle,
                               ),
                             ],
@@ -123,7 +123,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 TextField(
                   onChanged: (value) => setState(() => _searchQuery = value),
                   decoration: const InputDecoration(
-                    hintText: 'Search places...',
+                    hintText: 'Tìm kiếm địa điểm...',
                     prefixIcon: Icon(Icons.search_rounded),
                   ),
                 ),
@@ -148,9 +148,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 24),
                 const SectionTitle(
-                  title: 'Saved places',
+                  title: 'Địa điểm đã lưu',
                   icon: Icons.bookmark_rounded,
                 ),
+                if (placeProvider.hasPendingSync) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Dang dong bo thay doi...',
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.primaryDark,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 14),
                 if (placeProvider.isLoading && placeProvider.places.isEmpty)
                   const Padding(
@@ -160,14 +169,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 else if (placeProvider.errorMessage != null)
                   EmptyState(
                     icon: Icons.cloud_off_rounded,
-                    title: 'Could not load places',
+                    title: 'Không thể tải địa điểm',
                     message: placeProvider.errorMessage!,
                   )
                 else if (places.isEmpty)
                   const EmptyState(
                     icon: Icons.search_off_rounded,
-                    title: 'No places found',
-                    message: 'Try another search or category.',
+                    title: 'Không tìm thấy địa điểm',
+                    message: 'Hãy thử tìm kiếm khác hoặc chọn danh mục khác.',
                   )
                 else
                   ...places.map(
@@ -181,9 +190,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               builder: (_) => AddPlaceScreen(place: place),
                             ),
                           );
-                          if (context.mounted) {
-                            await context.read<PlaceProvider>().fetchPlaces();
-                          }
                         },
                         onTap: () {
                           Navigator.of(context).push(

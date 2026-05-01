@@ -13,6 +13,17 @@ export class CategoryRepository {
     });
   }
 
+  findByName(name: string) {
+    return prisma.category.findFirst({
+      where: {
+        name: {
+          equals: name,
+          mode: 'insensitive',
+        },
+      },
+    });
+  }
+
   create(data: CategoryCreateInput) {
     return prisma.category.create({ data });
   }

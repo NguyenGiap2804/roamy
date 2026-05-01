@@ -1,3 +1,9 @@
+import '../core/utils/coordinates.dart';
+
+const scheduleStatusUpcoming = 'UPCOMING';
+const scheduleStatusDone = 'DONE';
+const scheduleStatusCancelled = 'CANCELLED';
+
 class Schedule {
   const Schedule({
     required this.id,
@@ -13,6 +19,7 @@ class Schedule {
     this.mapsUrl,
     this.latitude,
     this.longitude,
+    this.isPendingSync = false,
   });
 
   final String id;
@@ -28,6 +35,7 @@ class Schedule {
   final String? mapsUrl;
   final double? latitude;
   final double? longitude;
+  final bool isPendingSync;
 
   factory Schedule.fromJson(Map<String, dynamic> json) {
     final place = json['place'];
@@ -66,6 +74,7 @@ class Schedule {
           : json['longitude'] != null
           ? (json['longitude'] as num).toDouble()
           : null,
+      isPendingSync: false,
     );
   }
 
@@ -79,14 +88,63 @@ class Schedule {
     };
   }
 
+  Schedule copyWith({
+    String? id,
+    String? placeId,
+    DateTime? date,
+    String? time,
+    String? status,
+    bool? hasReminder,
+    Object? placeName = _unset,
+    Object? category = _unset,
+    Object? address = _unset,
+    Object? openingHours = _unset,
+    Object? mapsUrl = _unset,
+    Object? latitude = _unset,
+    Object? longitude = _unset,
+    bool? isPendingSync,
+  }) {
+    return Schedule(
+      id: id ?? this.id,
+      placeId: placeId ?? this.placeId,
+      date: date ?? this.date,
+      time: time ?? this.time,
+      status: status ?? this.status,
+      hasReminder: hasReminder ?? this.hasReminder,
+      placeName: identical(placeName, _unset)
+          ? this.placeName
+          : placeName as String?,
+      category: identical(category, _unset)
+          ? this.category
+          : category as String?,
+      address: identical(address, _unset) ? this.address : address as String?,
+      openingHours: identical(openingHours, _unset)
+          ? this.openingHours
+          : openingHours as String?,
+      mapsUrl: identical(mapsUrl, _unset) ? this.mapsUrl : mapsUrl as String?,
+      latitude: identical(latitude, _unset)
+          ? this.latitude
+          : latitude as double?,
+      longitude: identical(longitude, _unset)
+          ? this.longitude
+          : longitude as double?,
+      isPendingSync: isPendingSync ?? this.isPendingSync,
+    );
+  }
+
   String get displayPlaceName => placeName ?? 'Saved place';
   String get displayCategory => category ?? 'Other';
   String get displayAddress => address ?? 'No address';
   String get displayOpeningHours =>
       openingHours?.trim().isNotEmpty == true ? openingHours! : time;
   bool get hasMapsUrl => mapsUrl?.trim().isNotEmpty == true;
-  bool get hasCoordinates => latitude != null && longitude != null;
+  bool get hasCoordinates => hasUsableCoordinates(latitude, longitude);
+  bool get isUpcoming => status == scheduleStatusUpcoming;
+  bool get isDone => status == scheduleStatusDone;
+  bool get isCancelled => status == scheduleStatusCancelled;
 }
+
+const Object _unset = Object();
 
 String _dateToApi(DateTime date) {
   final month = date.month.toString().padLeft(2, '0');

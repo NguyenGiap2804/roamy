@@ -8,6 +8,7 @@ import '../../models/category.dart';
 import '../../providers/category_provider.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/primary_button.dart';
+import '../../core/utils/snackbar_helper.dart';
 
 class CategoriesScreen extends StatefulWidget {
   const CategoriesScreen({super.key});
@@ -46,19 +47,20 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               if (categoryName.isEmpty) return;
 
               final provider = context.read<CategoryProvider>();
-              final navigator = Navigator.of(dialogContext);
-              final messenger = ScaffoldMessenger.of(context);
 
               try {
                 await provider.addCategory(categoryName);
-                navigator.pop();
-                messenger.showSnackBar(
-                  const SnackBar(content: Text('Thêm danh mục thành công')),
-                );
+                if (dialogContext.mounted) {
+                  Navigator.pop(dialogContext);
+                  SnackBarHelper.showSuccess(
+                    context,
+                    'Thêm danh mục thành công',
+                  );
+                }
               } catch (error) {
-                messenger.showSnackBar(
-                  SnackBar(content: Text(error.toString())),
-                );
+                if (dialogContext.mounted) {
+                  SnackBarHelper.showError(context, error.toString());
+                }
               }
             },
             child: const Text('Thêm'),
@@ -85,10 +87,10 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Categories', style: AppTextStyles.headline),
+                          Text('Danh mục', style: AppTextStyles.headline),
                           const SizedBox(height: 8),
                           const Text(
-                            'Organize saved places by mood and purpose.',
+                            'Sắp xếp địa điểm theo nhu cầu của bạn.',
                             style: AppTextStyles.subtitle,
                           ),
                         ],
@@ -96,7 +98,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                     ),
                     const SizedBox(width: 12),
                     PrimaryButton(
-                      label: 'Add',
+                      label: 'Thêm',
                       icon: Icons.add_rounded,
                       expanded: false,
                       onPressed: () => _showAddCategoryDialog(context),
@@ -113,14 +115,14 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 else if (categoryProvider.errorMessage != null)
                   EmptyState(
                     icon: Icons.cloud_off_rounded,
-                    title: 'Could not load categories',
+                    title: 'Không thể tải danh mục',
                     message: categoryProvider.errorMessage!,
                   )
                 else if (categoryProvider.categories.isEmpty)
                   const EmptyState(
                     icon: Icons.category_outlined,
-                    title: 'No categories yet',
-                    message: 'Categories from the backend will appear here.',
+                    title: 'Chưa có danh mục nào',
+                    message: 'Danh mục từ hệ thống sẽ hiển thị tại đây.',
                   )
                 else
                   GridView.builder(
@@ -182,7 +184,7 @@ class _CategoryCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '${category.placeCount} saved places',
+            '${category.placeCount} địa điểm đã lưu',
             style: AppTextStyles.caption,
           ),
         ],

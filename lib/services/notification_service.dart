@@ -5,7 +5,19 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
-class NotificationService {
+abstract class NotificationGateway {
+  Future<int> scheduleNotification(
+    DateTime dateTime,
+    String title,
+    String body, {
+    int? id,
+  });
+
+  Future<void> cancelNotification(int id);
+  Future<void> cancelAll();
+}
+
+class NotificationService implements NotificationGateway {
   NotificationService._();
 
   static final NotificationService instance = NotificationService._();
@@ -59,10 +71,13 @@ class NotificationService {
     );
     await _createAndroidChannel();
     await requestPermissions();
-    _refreshExactAlarmPermission(); 
-    
+    _refreshExactAlarmPermission();
+
     // Test notification on startup to verify permissions
-    await showInstantNotification('RoaMy Place', 'Hệ thống nhắc nhở đã sẵn sàng!');
+    await showInstantNotification(
+      'RoaMy Place',
+      'Hệ thống nhắc nhở đã sẵn sàng!',
+    );
   }
 
   Future<void> requestPermissions() async {
@@ -98,6 +113,7 @@ class NotificationService {
     );
   }
 
+  @override
   Future<int> scheduleNotification(
     DateTime dateTime,
     String title,
@@ -105,13 +121,13 @@ class NotificationService {
     int? id,
   }) async {
     final notificationId = id ?? _notificationIdFromDate(dateTime);
-    final scheduledDate = tz.TZDateTime.from(dateTime, tz.local);
 
-    if (!scheduledDate.isAfter(tz.TZDateTime.now(tz.local))) {
-      await showInstantNotification(title, body);
+    if (!shouldScheduleNotificationAt(dateTime)) {
+      debugPrint('Skipping past notification for $dateTime');
       return notificationId;
     }
 
+    final scheduledDate = tz.TZDateTime.from(dateTime, tz.local);
     await _plugin.zonedSchedule(
       id: notificationId,
       title: title,
@@ -124,10 +140,12 @@ class NotificationService {
     return notificationId;
   }
 
+  @override
   Future<void> cancelNotification(int id) {
     return _plugin.cancel(id: id);
   }
 
+  @override
   Future<void> cancelAll() {
     return _plugin.cancelAll();
   }
@@ -195,4 +213,8 @@ class NotificationService {
   int _notificationIdFromDate(DateTime dateTime) {
     return dateTime.millisecondsSinceEpoch.remainder(2147483647);
   }
+}
+
+bool shouldScheduleNotificationAt(DateTime scheduledAt, {DateTime? now}) {
+  return scheduledAt.isAfter(now ?? DateTime.now());
 }

@@ -30,9 +30,7 @@ class PlaceCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         child: Container(
           height: 200,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-          ),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(24)),
           clipBehavior: Clip.antiAlias,
           child: Stack(
             children: [
@@ -77,6 +75,43 @@ class PlaceCard extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
+                        if (place.isPendingSync)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.4),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Dang dong bo',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (place.isPendingSync && place.hasReminder)
+                          const SizedBox(width: 8),
                         if (place.hasReminder)
                           Container(
                             padding: const EdgeInsets.all(6),
@@ -107,7 +142,9 @@ class PlaceCard extends StatelessWidget {
                                   color: Colors.white,
                                   shadows: [
                                     Shadow(
-                                      color: Colors.black.withValues(alpha: 0.8),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.8,
+                                      ),
                                       blurRadius: 8,
                                       offset: const Offset(0, 2),
                                     ),
@@ -121,8 +158,16 @@ class PlaceCard extends StatelessWidget {
                                 spacing: 8,
                                 runSpacing: 6,
                                 children: [
-                                  _Pill(label: place.category, icon: Icons.sell_rounded, isLight: true),
-                                  const _Pill(label: 'Maps', icon: Icons.map_rounded, isLight: true),
+                                  _Pill(
+                                    label: place.category,
+                                    icon: Icons.sell_rounded,
+                                    isLight: true,
+                                  ),
+                                  const _Pill(
+                                    label: 'Bản đồ',
+                                    icon: Icons.map_rounded,
+                                    isLight: true,
+                                  ),
                                 ],
                               ),
                               const SizedBox(height: 12),
@@ -151,7 +196,10 @@ class PlaceCard extends StatelessWidget {
                             ),
                             if (onUpdate != null) ...[
                               const SizedBox(height: 10),
-                              _UpdateButton(onPressed: onUpdate!, isLight: true),
+                              _UpdateButton(
+                                onPressed: onUpdate!,
+                                isLight: true,
+                              ),
                             ],
                           ],
                         ),
@@ -197,7 +245,11 @@ class _UpdateButton extends StatelessWidget {
 }
 
 class _MetaLine extends StatelessWidget {
-  const _MetaLine({required this.icon, required this.text, this.isLight = false});
+  const _MetaLine({
+    required this.icon,
+    required this.text,
+    this.isLight = false,
+  });
 
   final IconData icon;
   final String text;
@@ -210,7 +262,9 @@ class _MetaLine extends StatelessWidget {
         Icon(
           icon,
           size: 15,
-          color: isLight ? Colors.white.withValues(alpha: 0.9) : AppColors.textSecondary,
+          color: isLight
+              ? Colors.white.withValues(alpha: 0.9)
+              : AppColors.textSecondary,
         ),
         const SizedBox(width: 5),
         Expanded(
@@ -219,7 +273,9 @@ class _MetaLine extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: AppTextStyles.caption.copyWith(
-              color: isLight ? Colors.white.withValues(alpha: 0.9) : AppColors.textSecondary,
+              color: isLight
+                  ? Colors.white.withValues(alpha: 0.9)
+                  : AppColors.textSecondary,
             ),
           ),
         ),
@@ -240,7 +296,9 @@ class _Pill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: isLight ? Colors.white.withValues(alpha: 0.2) : AppColors.primarySoft,
+        color: isLight
+            ? Colors.white.withValues(alpha: 0.2)
+            : AppColors.primarySoft,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(

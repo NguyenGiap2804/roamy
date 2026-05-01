@@ -109,4 +109,117 @@ void main() {
       'Luxury Building, 99 Đ. Võ Chí Công, Khu đô thị Tây Hồ Tây, Xuân Đỉnh, Hà Nội, Việt Nam',
     );
   });
+  test('extracts structured place details from HTML JSON-LD', () {
+    const html = '''
+<html>
+  <head>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "CafeOrCoffeeShop",
+        "name": "The Cofftea",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "123 Pho Hue",
+          "addressLocality": "Ha Noi",
+          "addressCountry": "Viet Nam"
+        },
+        "priceRange": "100.000-200.000 VND/person",
+        "openingHours": ["Mon-Sun 08:00-22:00"],
+        "telephone": "+84 123 456 789",
+        "aggregateRating": {
+          "@type": "AggregateRating",
+          "ratingValue": "4.6"
+        },
+        "geo": {
+          "@type": "GeoCoordinates",
+          "latitude": 21.0123,
+          "longitude": 105.85
+        }
+      }
+    </script>
+  </head>
+</html>
+''';
+
+    final service = GoogleMapsExtractionService();
+    final data = service.extractFromHtmlBody(
+      html,
+      baseUri: Uri.parse('https://www.google.com/maps/place/The+Cofftea'),
+    );
+
+    expect(data.name, 'The Cofftea');
+    expect(data.address, '123 Pho Hue, Ha Noi, Viet Nam');
+    expect(data.priceRange, '100.000-200.000 VND/person');
+    expect(data.openingHours, 'Mon-Sun 08:00-22:00');
+    expect(data.phone, '+84 123 456 789');
+    expect(data.rating, 4.6);
+    expect(data.latitude, 21.0123);
+    expect(data.longitude, 105.85);
+  });
+
+  test('falls back to ES5 deep link when preview link is missing', () {
+    const html = '''
+<html>
+  <head>
+    <script>
+      window.ES5DGURL='/maps/place/The+Cofftea/@21.0151283,105.5181395,16z/data=!4m7!3m6!1s0x0:0x0';
+    </script>
+  </head>
+</html>
+''';
+
+    final service = GoogleMapsExtractionService();
+    final data = service.extractFromHtmlBody(
+      html,
+      baseUri: Uri.parse('https://www.google.com/maps/search/?api=1'),
+    );
+
+    expect(data.name, 'The Cofftea');
+    expect(data.latitude, 21.0151283);
+    expect(data.longitude, 105.5181395);
+  });
+
+  test('marks complete extracted place data as high confidence', () {
+    const data = GoogleMapsPlaceData(
+      name: 'The Cofftea',
+      address: '123 Pho Hue, Ha Noi, Viet Nam',
+      priceRange: '100.000-200.000 VND/person',
+      openingHours: '08:00 - 22:00',
+      phone: '+84 123 456 789',
+      rating: 4.6,
+      latitude: 21.0123,
+      longitude: 105.85,
+    );
+
+    final review = data.review;
+
+    expect(review.confidence, GoogleMapsExtractionConfidence.high);
+    expect(review.needsManualReview, isFalse);
+    expect(review.issues, isEmpty);
+    expect(
+      review.capturedFields,
+      containsAll(<String>['Ten', 'Dia chi', 'Toa do', 'Gio mo cua']),
+    );
+  });
+
+  test('still asks for manual review when only core fields are extracted', () {
+    const data = GoogleMapsPlaceData(
+      name: 'The Cofftea',
+      address: '123 Pho Hue, Ha Noi, Viet Nam',
+      latitude: 21.0123,
+      longitude: 105.85,
+    );
+
+    final review = data.review;
+
+    expect(review.confidence, GoogleMapsExtractionConfidence.high);
+    expect(review.needsManualReview, isTrue);
+    expect(
+      review.issues,
+      contains(
+        'Link nay chi tra ve du lieu co ban. Nen doi chieu them gio mo cua, gia va lien he truoc khi luu.',
+      ),
+    );
+  });
 }

@@ -6,12 +6,14 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../models/place.dart';
+import '../../models/schedule.dart';
 import '../../providers/place_provider.dart';
 import '../../providers/schedule_provider.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/rating_stars.dart';
 import '../../widgets/section_title.dart';
 import '../../widgets/map_preview.dart';
+import '../../core/utils/snackbar_helper.dart';
 
 class PlaceDetailScreen extends StatefulWidget {
   const PlaceDetailScreen({super.key, required this.place});
@@ -31,22 +33,16 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
     _placeFuture = context.read<PlaceProvider>().getPlaceById(widget.place.id);
   }
 
-  void _showFutureSnack(BuildContext context, String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
-
   Future<void> _openSchedulePlanner(
     BuildContext context,
     Place place, {
     required bool reminderDefault,
   }) async {
     final scheduleProvider = context.read<ScheduleProvider>();
-    await scheduleProvider.fetchSchedules();
+    final schedules = await scheduleProvider.getSchedulesSnapshot();
     if (!context.mounted) return;
 
-    final matchingSchedules = scheduleProvider.schedules.where((schedule) {
+    final matchingSchedules = schedules.where((schedule) {
       return schedule.placeId == place.id && schedule.status == 'UPCOMING';
     }).toList()..sort((a, b) => a.date.compareTo(b.date));
     final month = matchingSchedules.isEmpty
@@ -68,7 +64,7 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -95,9 +91,16 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
     var changed = false;
 
     try {
+      final tasks = <Future>[];
+
       for (final entry in existingByDay.entries) {
         if (!selected.contains(entry.key)) {
-          await scheduleProvider.deleteSchedule(entry.value.id);
+          tasks.add(
+            scheduleProvider.deleteSchedule(
+              entry.value.id,
+              schedule: entry.value,
+            ),
+          );
           changed = true;
         }
       }
@@ -118,36 +121,55 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
           'time': _timeRangeToApi(plan.start, plan.end),
           'status': 'UPCOMING',
           'hasReminder': plan.hasReminder,
+          'placeName': place.name,
+          'category': place.category,
+          'address': place.address,
+          'openingHours': place.openingHours,
+          'mapsUrl': place.mapsUrl,
+          'latitude': place.latitude,
+          'longitude': place.longitude,
         };
 
         final existingSchedule = existingByDay[_dateOnly(date)];
         if (existingSchedule == null) {
-          await _createScheduleWithFallback(
-            scheduleProvider,
-            payload,
-            plan.start,
+          tasks.add(
+            _createScheduleWithFallback(scheduleProvider, payload, plan.start),
           );
+          changed = true;
         } else {
-          await _updateScheduleWithFallback(
-            scheduleProvider,
-            existingSchedule.id,
-            payload,
-            plan.start,
-          );
+          final timeChanged = existingSchedule.time != payload['time'];
+          final reminderChanged =
+              existingSchedule.hasReminder != payload['hasReminder'];
+
+          if (timeChanged || reminderChanged) {
+            tasks.add(
+              _updateScheduleWithFallback(
+                scheduleProvider,
+                existingSchedule.id,
+                payload,
+                plan.start,
+                currentSchedule: existingSchedule,
+              ),
+            );
+            changed = true;
+          }
         }
-        changed = true;
       }
 
+      await Future.wait(tasks);
+
       if (!context.mounted) return;
-      _showSavedSnack(
+      SnackBarHelper.showSuccess(
         context,
         changed
             ? (hadExisting ? 'Lưu thay đổi thành công' : 'Lưu thành công')
-            : 'Không có thay đổi',
+            : (selected.isNotEmpty
+                  ? 'Không có thông tin được cập nhật'
+                  : 'Không có thay đổi'),
       );
     } catch (error) {
       if (!context.mounted) return;
-      _showFutureSnack(context, error.toString());
+      SnackBarHelper.showError(context, error.toString());
     }
   }
 
@@ -170,7 +192,10 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                   child: CircleAvatar(
                     backgroundColor: Colors.white.withValues(alpha: 0.88),
                     child: IconButton(
-                      icon: const Icon(Icons.arrow_back_rounded),
+                      icon: const Icon(
+                        Icons.arrow_back_rounded,
+                        color: AppColors.textPrimary,
+                      ),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   ),
@@ -220,7 +245,7 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                         const LinearProgressIndicator(minHeight: 2),
                       if (snapshot.hasError) ...[
                         Text(
-                          'Could not refresh place details',
+                          'Không thể cập nhật chi tiết địa điểm',
                           style: AppTextStyles.caption.copyWith(
                             color: AppColors.red,
                           ),
@@ -240,10 +265,13 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      RatingStars(rating: place.rating),
+                      RatingStars(
+                        rating: place.rating,
+                        textColor: Theme.of(context).colorScheme.onSurface,
+                      ),
                       const SizedBox(height: 24),
                       const SectionTitle(
-                        title: 'Overview',
+                        title: 'Tổng quan',
                         icon: Icons.info_rounded,
                       ),
                       const SizedBox(height: 12),
@@ -252,12 +280,12 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                           if (place.hasPriceRange)
                             _InfoRow(
                               icon: Icons.payments_rounded,
-                              title: 'Price range',
+                              title: 'Khoảng giá',
                               value: place.priceRange,
                             ),
                           _InfoRow(
                             icon: Icons.location_on_rounded,
-                            title: 'Address',
+                            title: 'Địa chỉ',
                             value: place.address,
                           ),
                         ],
@@ -267,7 +295,7 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                           place.hasMapsUrl) ...[
                         const SizedBox(height: 22),
                         const SectionTitle(
-                          title: 'Visit information',
+                          title: 'Thông tin tham quan',
                           icon: Icons.schedule_rounded,
                         ),
                         const SizedBox(height: 12),
@@ -276,13 +304,13 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                             if (place.hasOpeningHours)
                               _InfoRow(
                                 icon: Icons.access_time_rounded,
-                                title: 'Opening hours',
+                                title: 'Giờ mở cửa',
                                 value: place.openingHours,
                               ),
                             if (place.hasPhone)
                               _InfoRow(
                                 icon: Icons.phone_rounded,
-                                title: 'Phone',
+                                title: 'Điện thoại',
                                 value: place.safePhone,
                               ),
                             if (place.hasMapsUrl)
@@ -296,7 +324,7 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                       ],
                       const SizedBox(height: 22),
                       const SectionTitle(
-                        title: 'Personal note',
+                        title: 'Ghi chú cá nhân',
                         icon: Icons.edit_note_rounded,
                       ),
                       const SizedBox(height: 12),
@@ -308,27 +336,26 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                       ),
                       const SizedBox(height: 22),
                       const SectionTitle(
-                        title: 'Location Preview',
+                        title: 'Xem trước vị trí',
                         icon: Icons.pin_drop_rounded,
                       ),
                       const SizedBox(height: 12),
                       MapPreview(place: place),
                       const SizedBox(height: 22),
                       const SectionTitle(
-                        title: 'Actions',
+                        title: 'Thao tác',
                         icon: Icons.touch_app_rounded,
                       ),
                       const SizedBox(height: 12),
                       PrimaryButton(
-                        label: 'Open Google Maps',
+                        label: 'Mở Google Maps',
                         icon: Icons.map_rounded,
                         onPressed: () async {
                           Uri? uri;
                           if (place.mapsUrl != null &&
                               place.mapsUrl!.isNotEmpty) {
                             uri = Uri.parse(place.mapsUrl!);
-                          } else if (place.latitude != null &&
-                              place.longitude != null) {
+                          } else if (place.hasCoordinates) {
                             uri = Uri.parse(
                               'https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}',
                             );
@@ -345,9 +372,9 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                           }
 
                           if (context.mounted) {
-                            _showFutureSnack(
+                            SnackBarHelper.showError(
                               context,
-                              'Could not open Google Maps',
+                              'Không thể mở bản đồ',
                             );
                           }
                         },
@@ -357,7 +384,7 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                         children: [
                           Expanded(
                             child: PrimaryButton(
-                              label: 'Set Reminder',
+                              label: 'Nhắc nhở',
                               icon: Icons.notifications_rounded,
                               secondary: true,
                               onPressed: () => _openSchedulePlanner(
@@ -370,7 +397,7 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: PrimaryButton(
-                              label: 'Add Calendar',
+                              label: 'Lịch trình',
                               icon: Icons.event_rounded,
                               secondary: true,
                               onPressed: () => _openSchedulePlanner(
@@ -437,35 +464,21 @@ Future<void> _updateScheduleWithFallback(
   ScheduleProvider provider,
   String id,
   Map<String, dynamic> payload,
-  TimeOfDay start,
-) async {
+  TimeOfDay start, {
+  Schedule? currentSchedule,
+}) async {
   try {
-    await provider.updateSchedule(id, payload);
+    await provider.updateSchedule(
+      id,
+      payload,
+      currentSchedule: currentSchedule,
+    );
   } catch (_) {
-    await provider.updateSchedule(id, {...payload, 'time': _timeToApi(start)});
+    await provider.updateSchedule(id, {
+      ...payload,
+      'time': _timeToApi(start),
+    }, currentSchedule: currentSchedule);
   }
-}
-
-void _showSavedSnack(BuildContext context, String message) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      behavior: SnackBarBehavior.floating,
-      backgroundColor: AppColors.primaryDark,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      content: Row(
-        children: [
-          const Icon(Icons.check_circle_rounded, color: Colors.white),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message,
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
 }
 
 TimeOfDay _timeFromSchedule(dynamic schedule) {
@@ -552,15 +565,7 @@ class _SchedulePlannerSheetState extends State<_SchedulePlannerSheet> {
   late TimeOfDay _end = widget.initialEnd;
   int _step = 0;
 
-  static const _weekdayLabels = [
-    'Mon',
-    'Tue',
-    'Wed',
-    'Thu',
-    'Fri',
-    'Sat',
-    'Sun',
-  ];
+  static const _weekdayLabels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 
   @override
   Widget build(BuildContext context) {
@@ -569,7 +574,9 @@ class _SchedulePlannerSheetState extends State<_SchedulePlannerSheet> {
         AppSpacing.xl,
         AppSpacing.lg,
         AppSpacing.xl,
-        MediaQuery.of(context).viewInsets.bottom + AppSpacing.xl,
+        MediaQuery.of(context).viewInsets.bottom +
+            MediaQuery.of(context).padding.bottom +
+            AppSpacing.xl,
       ),
       child: AnimatedSize(
         duration: const Duration(milliseconds: 180),
@@ -587,8 +594,8 @@ class _SchedulePlannerSheetState extends State<_SchedulePlannerSheet> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _SheetHeader(
-          title: 'Select days',
-          subtitle: '${_selectedDates.length} days selected',
+          title: 'Chọn ngày',
+          subtitle: 'Đã chọn ${_selectedDates.length} ngày',
         ),
         const SizedBox(height: 16),
         Row(
@@ -658,10 +665,16 @@ class _SchedulePlannerSheetState extends State<_SchedulePlannerSheet> {
               child: Container(
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: selected ? AppColors.primary : AppColors.primarySoft,
+                  color: selected
+                      ? AppColors.primary
+                      : (Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white.withValues(alpha: 0.05)
+                            : AppColors.primarySoft),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: selected ? AppColors.primary : AppColors.border,
+                    color: selected
+                        ? AppColors.primary
+                        : Theme.of(context).dividerColor,
                   ),
                 ),
                 child: Opacity(
@@ -669,7 +682,9 @@ class _SchedulePlannerSheetState extends State<_SchedulePlannerSheet> {
                   child: Text(
                     '$day',
                     style: TextStyle(
-                      color: selected ? Colors.white : AppColors.textPrimary,
+                      color: selected
+                          ? Colors.white
+                          : Theme.of(context).colorScheme.onSurface,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -684,22 +699,22 @@ class _SchedulePlannerSheetState extends State<_SchedulePlannerSheet> {
           runSpacing: 8,
           children: [
             ActionChip(
-              label: const Text('Weekdays'),
+              label: const Text('Ngày trong tuần'),
               onPressed: () => _toggleByWeekday(includeWeekends: false),
             ),
             ActionChip(
-              label: const Text('Weekend'),
+              label: const Text('Cuối tuần'),
               onPressed: () => _toggleByWeekday(includeWeekends: true),
             ),
             ActionChip(
-              label: const Text('Clear'),
+              label: const Text('Xóa'),
               onPressed: () => setState(_selectedDates.clear),
             ),
           ],
         ),
         const SizedBox(height: 18),
         PrimaryButton(
-          label: 'Next',
+          label: 'Tiếp theo',
           icon: Icons.arrow_forward_rounded,
           onPressed: _selectedDates.isEmpty
               ? () {}
@@ -715,8 +730,8 @@ class _SchedulePlannerSheetState extends State<_SchedulePlannerSheet> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _SheetHeader(
-          title: 'Set working time',
-          subtitle: '${_selectedDates.length} selected days',
+          title: 'Đặt thời gian tham quan',
+          subtitle: 'Đã chọn ${_selectedDates.length} ngày',
           leading: IconButton(
             onPressed: () => setState(() => _step = 0),
             icon: const Icon(Icons.arrow_back_rounded),
@@ -724,30 +739,31 @@ class _SchedulePlannerSheetState extends State<_SchedulePlannerSheet> {
         ),
         const SizedBox(height: 12),
         _TimeTile(
-          label: 'Start',
+          label: 'Bắt đầu',
           value: _start.format(context),
           onTap: () => _pickTime(isStart: true),
         ),
         _TimeTile(
-          label: 'End',
+          label: 'Kết thúc',
           value: _end.format(context),
           onTap: () => _pickTime(isStart: false),
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           value: _hasReminder,
-          title: const Text('Reminder'),
-          subtitle: const Text('Notify 30 minutes before and at start time'),
+          title: const Text('Nhắc nhở'),
+          subtitle: const Text('Thông báo trước 30 phút và lúc bắt đầu'),
           onChanged: (value) => setState(() => _hasReminder = value),
         ),
         const SizedBox(height: 12),
         PrimaryButton(
-          label: 'Save schedule',
+          label: 'Lưu lịch trình',
           icon: Icons.check_rounded,
           onPressed: () {
             if (!_endIsAfterStart) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('End time must be after start')),
+              SnackBarHelper.showError(
+                context,
+                'Giờ kết thúc phải sau giờ bắt đầu',
               );
               return;
             }
@@ -882,13 +898,17 @@ class _Badge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: AppColors.primarySoft,
+        color: Theme.of(context).brightness == Brightness.dark
+            ? AppColors.primary.withValues(alpha: 0.15)
+            : AppColors.primarySoft,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
-        style: const TextStyle(
-          color: AppColors.primaryDark,
+        style: TextStyle(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? AppColors.primary
+              : AppColors.primaryDark,
           fontWeight: FontWeight.w800,
         ),
       ),

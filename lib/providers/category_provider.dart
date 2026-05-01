@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show ChangeNotifier;
 
+import '../core/network/api_client.dart';
 import '../models/category.dart';
 import '../services/category_service.dart';
 
@@ -32,6 +33,14 @@ class CategoryProvider extends ChangeNotifier {
   }
 
   Future<Category?> addCategory(String name) async {
+    final existingCategory = findByName(name);
+    if (existingCategory != null) {
+      final message = 'Danh mục "${existingCategory.name}" đã tồn tại';
+      _errorMessage = message;
+      notifyListeners();
+      throw ApiException(message, statusCode: 409);
+    }
+
     _setLoading(true);
     try {
       final category = await _categoryService.createCategory({
@@ -50,8 +59,20 @@ class CategoryProvider extends ChangeNotifier {
   }
 
   Category? findByName(String name) {
+    final normalizedName = _normalizeCategoryName(name);
     for (final category in _categories) {
-      if (category.name == name) return category;
+      if (_normalizeCategoryName(category.name) == normalizedName) {
+        return category;
+      }
+    }
+    return null;
+  }
+
+  Category? findById(String id) {
+    for (final category in _categories) {
+      if (category.id == id) {
+        return category;
+      }
     }
     return null;
   }
@@ -59,5 +80,9 @@ class CategoryProvider extends ChangeNotifier {
   void _setLoading(bool value) {
     _isLoading = value;
     notifyListeners();
+  }
+
+  String _normalizeCategoryName(String value) {
+    return value.trim().toLowerCase();
   }
 }

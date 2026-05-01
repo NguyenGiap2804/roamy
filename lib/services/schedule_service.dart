@@ -25,14 +25,17 @@ class ScheduleService {
   }
 
   Future<Schedule> createSchedule(Map<String, dynamic> data) async {
-    final response = await _apiClient.post(ApiEndpoints.schedules, data);
+    final response = await _apiClient.post(
+      ApiEndpoints.schedules,
+      _apiPayload(data),
+    );
     return Schedule.fromJson(response as Map<String, dynamic>);
   }
 
   Future<Schedule> updateSchedule(String id, Map<String, dynamic> data) async {
     final response = await _apiClient.patch(
       ApiEndpoints.scheduleById(id),
-      data,
+      _apiPayload(data),
     );
     return Schedule.fromJson(response as Map<String, dynamic>);
   }
@@ -40,6 +43,16 @@ class ScheduleService {
   Future<void> deleteSchedule(String id) async {
     await _apiClient.delete(ApiEndpoints.scheduleById(id));
   }
+}
+
+Map<String, dynamic> _apiPayload(Map<String, dynamic> data) {
+  return {
+    if (data.containsKey('placeId')) 'placeId': data['placeId'],
+    if (data.containsKey('date')) 'date': data['date'],
+    if (data.containsKey('time')) 'time': data['time'],
+    if (data.containsKey('status')) 'status': data['status'],
+    if (data.containsKey('hasReminder')) 'hasReminder': data['hasReminder'],
+  };
 }
 
 String _dateToApi(DateTime date) {

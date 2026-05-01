@@ -2,7 +2,7 @@ import { NextFunction, Request, Response, Router } from "express";
 import multer from "multer";
 import { ValidationError } from "../../utils/errors";
 import { sendResponse } from "../../utils/response";
-import { uploadService } from "./upload.service";
+import { supportedImageMimeTypes, uploadService } from "./upload.service";
 
 export const uploadRoutes = Router();
 
@@ -10,10 +10,14 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype.startsWith("image/")) {
+    if (supportedImageMimeTypes.has(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new ValidationError("Only images are allowed"));
+      cb(
+        new ValidationError(
+          "Only JPEG, PNG, WebP, GIF, HEIC, and HEIF images are allowed",
+        ),
+      );
     }
   },
 });
@@ -32,17 +36,21 @@ function uploadImage(req: Request, res: Response, next: NextFunction) {
   });
 }
 
-uploadRoutes.post("/", uploadImage, async (req, res, next) => {
-  try {
-    if (!req.file) {
-      throw new ValidationError("No image provided");
+export function createUploadHandler(service = uploadService) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.file) {
+        throw new ValidationError("No image provided");
+      }
+
+      const requestOrigin = `${req.protocol}://${req.get("host")}`;
+      const url = await service.uploadImage(req.file, requestOrigin);
+
+      return sendResponse(res, 200, "Image uploaded successfully", { url });
+    } catch (error) {
+      return next(error);
     }
+  };
+}
 
-    const requestOrigin = `${req.protocol}://${req.get("host")}`;
-    const url = await uploadService.uploadImage(req.file, requestOrigin);
-
-    return sendResponse(res, 200, "Image uploaded successfully", { url });
-  } catch (error) {
-    return next(error);
-  }
-});
+uploadRoutes.post("/", uploadImage, createUploadHandler());

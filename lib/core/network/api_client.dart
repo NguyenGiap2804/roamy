@@ -6,10 +6,11 @@ import 'package:http/http.dart' as http;
 import 'api_endpoints.dart';
 
 class ApiException implements Exception {
-  const ApiException(this.message, {this.statusCode});
+  const ApiException(this.message, {this.statusCode, this.details});
 
   final String message;
   final int? statusCode;
+  final Object? details;
 
   @override
   String toString() => message;
@@ -86,6 +87,7 @@ class ApiClient {
       throw ApiException(
         message ?? 'Request failed',
         statusCode: response.statusCode,
+        details: decoded is Map<String, dynamic> ? decoded['data'] : null,
       );
     }
 

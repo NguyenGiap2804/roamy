@@ -10,6 +10,7 @@ import '../../providers/schedule_provider.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/section_title.dart';
+import '../../core/utils/snackbar_helper.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -22,6 +23,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   late DateTime _selectedDate = DateTime.now();
   late DateTime _month = DateTime(_selectedDate.year, _selectedDate.month);
   late int _selectedWeek = _weekOfMonth(_selectedDate);
+  _ScheduleStatusFilter _statusFilter = _ScheduleStatusFilter.all;
 
   @override
   void initState() {
@@ -69,18 +71,115 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Future<void> _showScheduleQuickView(Schedule schedule) async {
+    final screenContext = context;
     await showModalBottomSheet<void>(
-      context: context,
+      context: screenContext,
       useSafeArea: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => _ScheduleQuickView(
+      builder: (sheetContext) => _ScheduleQuickView(
         schedule: schedule,
-        onOpenMaps: () => _openScheduleMaps(context, schedule),
+        onOpenMaps: () => _openScheduleMaps(screenContext, schedule),
+        onQuickEdit: !schedule.isPendingSync
+            ? () => _openScheduleQuickEdit(sheetContext, schedule)
+            : null,
+        onMarkDone: schedule.isUpcoming && !schedule.isPendingSync
+            ? () => _changeScheduleStatus(
+                sheetContext,
+                schedule,
+                scheduleStatusDone,
+              )
+            : null,
+        onCancelSchedule: schedule.isUpcoming && !schedule.isPendingSync
+            ? () => _changeScheduleStatus(
+                sheetContext,
+                schedule,
+                scheduleStatusCancelled,
+              )
+            : null,
+        onReopenSchedule: !schedule.isUpcoming && !schedule.isPendingSync
+            ? () => _changeScheduleStatus(
+                sheetContext,
+                schedule,
+                scheduleStatusUpcoming,
+              )
+            : null,
       ),
     );
+  }
+
+  Future<void> _changeScheduleStatus(
+    BuildContext sheetContext,
+    Schedule schedule,
+    String status,
+  ) async {
+    Navigator.of(sheetContext).pop();
+
+    try {
+      await context.read<ScheduleProvider>().updateScheduleStatus(
+        schedule.id,
+        status,
+        currentSchedule: schedule,
+      );
+      if (!mounted) return;
+      SnackBarHelper.showSuccess(context, _statusActionSuccessMessage(status));
+    } catch (error) {
+      if (!mounted) return;
+      SnackBarHelper.showError(context, error.toString());
+    }
+  }
+
+  Future<void> _openScheduleQuickEdit(
+    BuildContext sheetContext,
+    Schedule schedule,
+  ) async {
+    Navigator.of(sheetContext).pop();
+
+    final result = await showModalBottomSheet<_ScheduleQuickEditResult>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => _ScheduleQuickEditSheet(schedule: schedule),
+    );
+
+    if (!mounted || result == null) return;
+
+    final payload = {
+      'time': result.end == null
+          ? _timeToApi(result.start)
+          : _timeRangeToApi(result.start, result.end!),
+      'hasReminder': result.hasReminder,
+    };
+
+    final hasChanged =
+        schedule.time != payload['time'] ||
+        schedule.hasReminder != result.hasReminder;
+
+    if (!hasChanged) {
+      SnackBarHelper.showSuccess(context, 'Khong co thay doi');
+      return;
+    }
+
+    try {
+      await _updateScheduleWithFallback(
+        context.read<ScheduleProvider>(),
+        schedule.id,
+        payload,
+        result.start,
+        currentSchedule: schedule,
+      );
+      if (!mounted) return;
+      SnackBarHelper.showSuccess(context, 'Da cap nhat lich trinh');
+    } catch (error) {
+      if (!mounted) return;
+      SnackBarHelper.showError(context, error.toString());
+    }
   }
 
   Future<void> _openScheduleMaps(
@@ -97,9 +196,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
 
     if (uri == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('No map link available')));
+      SnackBarHelper.showError(context, 'Không có liên kết bản đồ');
       return;
     }
 
@@ -112,9 +209,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     } catch (_) {}
 
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Could not open Maps')));
+      SnackBarHelper.showError(context, 'Không thể mở bản đồ');
     }
   }
 
@@ -124,6 +219,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       child: Consumer<ScheduleProvider>(
         builder: (context, scheduleProvider, _) {
           final items = scheduleProvider.schedules;
+          final filteredItems = _filterSchedules(items);
           final weekDates = _datesForWeek(_month, _selectedWeek);
           final weekCount = _weeksInMonth(_month);
 
@@ -132,10 +228,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
             child: ListView(
               padding: const EdgeInsets.all(AppSpacing.xl),
               children: [
-                Text('Your Plans', style: AppTextStyles.headline),
+                Text('Kế hoạch của bạn', style: AppTextStyles.headline),
                 const SizedBox(height: 8),
                 const Text(
-                  'A simple planning view for upcoming visits.',
+                  'Xem danh sách kế hoạch sắp tới.',
                   style: AppTextStyles.subtitle,
                 ),
                 const SizedBox(height: 22),
@@ -170,7 +266,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       final week = index + 1;
                       final selected = week == _selectedWeek;
                       return ChoiceChip(
-                        label: Text('Week $week'),
+                        label: Text('Tuần $week'),
                         selected: selected,
                         onSelected: (_) => _selectWeek(week),
                         labelStyle: TextStyle(
@@ -212,8 +308,50 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ),
                 const SizedBox(height: 24),
                 const SectionTitle(
-                  title: 'Scheduled places',
+                  title: 'Địa điểm đã lên lịch',
                   icon: Icons.event_note_rounded,
+                ),
+                if (scheduleProvider.hasPendingSync) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Dang dong bo lich trinh...',
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.primaryDark,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 14),
+                SizedBox(
+                  height: 38,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _ScheduleStatusFilter.values.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      final filter = _ScheduleStatusFilter.values[index];
+                      final selected = filter == _statusFilter;
+                      return ChoiceChip(
+                        label: Text(
+                          '${_labelForFilter(filter)} (${_countForFilter(items, filter)})',
+                        ),
+                        selected: selected,
+                        onSelected: (_) {
+                          setState(() {
+                            _statusFilter = filter;
+                          });
+                        },
+                        labelStyle: TextStyle(
+                          color: selected
+                              ? Colors.white
+                              : Theme.of(context).colorScheme.onSurface,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        selectedColor: AppColors.primary,
+                        backgroundColor: Theme.of(context).colorScheme.surface,
+                      );
+                    },
+                  ),
                 ),
                 const SizedBox(height: 14),
                 if (scheduleProvider.isLoading && items.isEmpty)
@@ -224,17 +362,24 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 else if (scheduleProvider.errorMessage != null)
                   EmptyState(
                     icon: Icons.cloud_off_rounded,
-                    title: 'Could not load plans',
+                    title: 'Không thể tải kế hoạch',
                     message: scheduleProvider.errorMessage!,
                   )
                 else if (items.isEmpty)
                   const EmptyState(
                     icon: Icons.event_busy_rounded,
-                    title: 'No plans yet',
-                    message: 'Scheduled visits will appear here.',
+                    title: 'Chưa có kế hoạch nào',
+                    message: 'Các địa điểm bạn lên lịch sẽ hiển thị tại đây.',
+                  )
+                else if (filteredItems.isEmpty)
+                  EmptyState(
+                    icon: Icons.filter_alt_off_rounded,
+                    title: 'Khong co lich phu hop',
+                    message:
+                        'Thu bo loc ${_labelForFilter(_statusFilter).toLowerCase()} hoac chon ngay khac.',
                   )
                 else
-                  ...items.map(
+                  ...filteredItems.map(
                     (item) => _ScheduleCard(
                       schedule: item,
                       onTap: () => _showScheduleQuickView(item),
@@ -249,7 +394,31 @@ class _CalendarScreenState extends State<CalendarScreen> {
       ),
     );
   }
+
+  List<Schedule> _filterSchedules(List<Schedule> schedules) {
+    return schedules.where((schedule) {
+      return switch (_statusFilter) {
+        _ScheduleStatusFilter.all => true,
+        _ScheduleStatusFilter.upcoming => schedule.isUpcoming,
+        _ScheduleStatusFilter.done => schedule.isDone,
+        _ScheduleStatusFilter.cancelled => schedule.isCancelled,
+      };
+    }).toList();
+  }
+
+  int _countForFilter(List<Schedule> schedules, _ScheduleStatusFilter filter) {
+    return schedules.where((schedule) {
+      return switch (filter) {
+        _ScheduleStatusFilter.all => true,
+        _ScheduleStatusFilter.upcoming => schedule.isUpcoming,
+        _ScheduleStatusFilter.done => schedule.isDone,
+        _ScheduleStatusFilter.cancelled => schedule.isCancelled,
+      };
+    }).length;
+  }
 }
+
+enum _ScheduleStatusFilter { all, upcoming, done, cancelled }
 
 class _DateTile extends StatelessWidget {
   const _DateTile({
@@ -264,7 +433,7 @@ class _DateTile extends StatelessWidget {
   final bool disabled;
   final VoidCallback? onTap;
 
-  static const _days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  static const _days = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 
   @override
   Widget build(BuildContext context) {
@@ -280,7 +449,9 @@ class _DateTile extends StatelessWidget {
               : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: selected ? AppColors.primary : Theme.of(context).dividerColor,
+            color: selected
+                ? AppColors.primary
+                : Theme.of(context).dividerColor,
           ),
         ),
         child: Opacity(
@@ -350,6 +521,37 @@ class _ScheduleCard extends StatelessWidget {
                           style: AppTextStyles.title.copyWith(fontSize: 17),
                         ),
                       ),
+                      if (schedule.isPendingSync)
+                        Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primarySoft,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const SizedBox(
+                                width: 10,
+                                height: 10,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Sync',
+                                style: AppTextStyles.caption.copyWith(
+                                  color: AppColors.primaryDark,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       if (schedule.hasReminder)
                         const Icon(
                           Icons.notifications_active_rounded,
@@ -438,53 +640,305 @@ class _ScheduleTimeBadge extends StatelessWidget {
 }
 
 class _ScheduleQuickView extends StatelessWidget {
-  const _ScheduleQuickView({required this.schedule, required this.onOpenMaps});
+  const _ScheduleQuickView({
+    required this.schedule,
+    required this.onOpenMaps,
+    this.onQuickEdit,
+    this.onMarkDone,
+    this.onCancelSchedule,
+    this.onReopenSchedule,
+  });
 
   final Schedule schedule;
   final VoidCallback onOpenMaps;
+  final VoidCallback? onQuickEdit;
+  final VoidCallback? onMarkDone;
+  final VoidCallback? onCancelSchedule;
+  final VoidCallback? onReopenSchedule;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
+      padding: EdgeInsets.fromLTRB(
         AppSpacing.xl,
         AppSpacing.lg,
         AppSpacing.xl,
-        AppSpacing.xl,
+        MediaQuery.of(context).padding.bottom + AppSpacing.xl,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  schedule.displayPlaceName,
-                  style: AppTextStyles.headline.copyWith(fontSize: 22),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    schedule.displayPlaceName,
+                    style: AppTextStyles.headline.copyWith(fontSize: 22),
+                  ),
+                ),
+                if (schedule.hasReminder)
+                  const Icon(
+                    Icons.notifications_active_rounded,
+                    color: AppColors.orange,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _StatusBadge(status: schedule.status),
+            const SizedBox(height: 16),
+            _QuickInfoRow(
+              icon: Icons.event_rounded,
+              label: 'Ngay',
+              value: _formatScheduleDate(schedule.date),
+            ),
+            const SizedBox(height: 12),
+            _QuickInfoRow(
+              icon: Icons.schedule_rounded,
+              label: 'Giờ hoạt động',
+              value: _displayScheduleTime(schedule),
+            ),
+            const SizedBox(height: 12),
+            _QuickInfoRow(
+              icon: Icons.location_on_rounded,
+              label: 'Dia diem',
+              value: schedule.displayAddress,
+            ),
+            const SizedBox(height: 18),
+            if (schedule.isPendingSync) ...[
+              Text(
+                'Dang dong bo thay doi...',
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.primaryDark,
                 ),
               ),
-              if (schedule.hasReminder)
-                const Icon(
-                  Icons.notifications_active_rounded,
-                  color: AppColors.orange,
-                ),
+              const SizedBox(height: 10),
+            ] else ...[
+              PrimaryButton(
+                label: 'Chinh nhanh',
+                icon: Icons.edit_calendar_rounded,
+                secondary: true,
+                onPressed: onQuickEdit!,
+              ),
+              const SizedBox(height: 10),
             ],
-          ),
-          const SizedBox(height: 16),
-          _QuickInfoRow(
-            icon: Icons.schedule_rounded,
-            label: 'Working hours',
-            value: _displayScheduleTime(schedule),
-          ),
-          const SizedBox(height: 18),
-          PrimaryButton(
-            label: 'Open Google Maps',
-            icon: Icons.map_rounded,
-            onPressed: onOpenMaps,
-          ),
-        ],
+            if (!schedule.isPendingSync && schedule.isUpcoming) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: PrimaryButton(
+                      label: 'Da di xong',
+                      icon: Icons.check_circle_rounded,
+                      secondary: true,
+                      onPressed: onMarkDone!,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: SizedBox(
+                      height: 53,
+                      child: FilledButton.icon(
+                        onPressed: onCancelSchedule,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.red,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          textStyle: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        icon: const Icon(Icons.close_rounded, size: 19),
+                        label: const Text('Huy lich'),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+            ] else if (!schedule.isPendingSync) ...[
+              PrimaryButton(
+                label: 'Mo lai lich',
+                icon: Icons.refresh_rounded,
+                secondary: true,
+                onPressed: onReopenSchedule!,
+              ),
+              const SizedBox(height: 10),
+            ],
+            const SizedBox(height: 18),
+            PrimaryButton(
+              label: 'Mở Google Maps',
+              icon: Icons.map_rounded,
+              onPressed: onOpenMaps,
+            ),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+class _ScheduleQuickEditResult {
+  const _ScheduleQuickEditResult({
+    required this.start,
+    required this.end,
+    required this.hasReminder,
+  });
+
+  final TimeOfDay start;
+  final TimeOfDay? end;
+  final bool hasReminder;
+}
+
+class _ScheduleQuickEditSheet extends StatefulWidget {
+  const _ScheduleQuickEditSheet({required this.schedule});
+
+  final Schedule schedule;
+
+  @override
+  State<_ScheduleQuickEditSheet> createState() =>
+      _ScheduleQuickEditSheetState();
+}
+
+class _ScheduleQuickEditSheetState extends State<_ScheduleQuickEditSheet> {
+  late TimeOfDay _start = _timeFromScheduleStart(widget.schedule);
+  late TimeOfDay? _end = _endTimeFromScheduleIfAny(widget.schedule);
+  late bool _hasReminder = widget.schedule.hasReminder;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.lg,
+        AppSpacing.xl,
+        MediaQuery.of(context).viewInsets.bottom +
+            MediaQuery.of(context).padding.bottom +
+            AppSpacing.xl,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Chinh nhanh',
+              style: AppTextStyles.headline.copyWith(fontSize: 22),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '${widget.schedule.displayPlaceName} • ${_formatScheduleDate(widget.schedule.date)}',
+              style: AppTextStyles.subtitle,
+            ),
+            const SizedBox(height: 10),
+            _StatusBadge(status: widget.schedule.status),
+            const SizedBox(height: 16),
+            _QuickEditTimeTile(
+              label: 'Bat dau',
+              value: _start.format(context),
+              onTap: () => _pickTime(isStart: true),
+            ),
+            _QuickEditTimeTile(
+              label: 'Ket thuc',
+              value: _end?.format(context) ?? 'Khong dat',
+              onTap: () => _pickTime(isStart: false),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (_end == null)
+                  ActionChip(
+                    label: const Text('Them gio ket thuc'),
+                    onPressed: () => _pickTime(isStart: false),
+                  )
+                else
+                  ActionChip(
+                    label: const Text('Bo gio ket thuc'),
+                    onPressed: () => setState(() => _end = null),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _hasReminder,
+              title: const Text('Nhac nho'),
+              subtitle: Text(
+                widget.schedule.isUpcoming
+                    ? 'Thong bao truoc 30 phut va luc bat dau'
+                    : 'Se co hieu luc khi lich tro lai Upcoming',
+              ),
+              onChanged: (value) => setState(() => _hasReminder = value),
+            ),
+            const SizedBox(height: 12),
+            PrimaryButton(
+              label: 'Luu thay doi',
+              icon: Icons.check_rounded,
+              onPressed: _submit,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickTime({required bool isStart}) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: isStart
+          ? _start
+          : (_end ?? _defaultQuickEditEndTime(_start)),
+    );
+    if (picked == null) return;
+
+    setState(() {
+      if (isStart) {
+        _start = picked;
+      } else {
+        _end = picked;
+      }
+    });
+  }
+
+  void _submit() {
+    if (_end != null && !_isEndAfterStart(_start, _end!)) {
+      SnackBarHelper.showError(context, 'Gio ket thuc phai sau gio bat dau');
+      return;
+    }
+
+    Navigator.of(context).pop(
+      _ScheduleQuickEditResult(
+        start: _start,
+        end: _end,
+        hasReminder: _hasReminder,
+      ),
+    );
+  }
+}
+
+class _QuickEditTimeTile extends StatelessWidget {
+  const _QuickEditTimeTile({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.schedule_rounded, color: AppColors.primary),
+      title: Text(label),
+      trailing: Text(value, style: AppTextStyles.title),
+      onTap: onTap,
     );
   }
 }
@@ -530,8 +984,8 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = switch (status) {
-      'DONE' => AppColors.green,
-      'CANCELLED' => AppColors.red,
+      scheduleStatusDone => AppColors.green,
+      scheduleStatusCancelled => AppColors.red,
       _ => AppColors.orange,
     };
 
@@ -555,10 +1009,96 @@ class _StatusBadge extends StatelessWidget {
 
 String _labelForStatus(String status) {
   return switch (status) {
-    'DONE' => 'Done',
-    'CANCELLED' => 'Cancelled',
+    scheduleStatusDone => 'Done',
+    scheduleStatusCancelled => 'Cancelled',
     _ => 'Upcoming',
   };
+}
+
+String _labelForFilter(_ScheduleStatusFilter filter) {
+  return switch (filter) {
+    _ScheduleStatusFilter.all => 'Tat ca',
+    _ScheduleStatusFilter.upcoming => 'Upcoming',
+    _ScheduleStatusFilter.done => 'Done',
+    _ScheduleStatusFilter.cancelled => 'Cancelled',
+  };
+}
+
+String _statusActionSuccessMessage(String status) {
+  return switch (status) {
+    scheduleStatusDone => 'Da danh dau da di xong',
+    scheduleStatusCancelled => 'Da huy lich trinh',
+    _ => 'Da mo lai lich trinh',
+  };
+}
+
+String _formatScheduleDate(DateTime date) {
+  return '${date.day}/${date.month}/${date.year}';
+}
+
+String _timeToApi(TimeOfDay time) {
+  final hour = time.hour.toString().padLeft(2, '0');
+  final minute = time.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
+}
+
+String _timeRangeToApi(TimeOfDay start, TimeOfDay end) {
+  return '${_timeToApi(start)}-${_timeToApi(end)}';
+}
+
+Future<void> _updateScheduleWithFallback(
+  ScheduleProvider provider,
+  String id,
+  Map<String, dynamic> payload,
+  TimeOfDay start, {
+  Schedule? currentSchedule,
+}) async {
+  try {
+    await provider.updateSchedule(
+      id,
+      payload,
+      currentSchedule: currentSchedule,
+    );
+  } catch (_) {
+    await provider.updateSchedule(id, {
+      ...payload,
+      'time': _timeToApi(start),
+    }, currentSchedule: currentSchedule);
+  }
+}
+
+TimeOfDay _timeFromScheduleStart(Schedule schedule) {
+  final value = _scheduleRawTimeParts(schedule).$1;
+  return _timeOfDayFromString(value) ?? const TimeOfDay(hour: 8, minute: 0);
+}
+
+TimeOfDay? _endTimeFromScheduleIfAny(Schedule schedule) {
+  final range = _splitTimeRange(schedule.time);
+  if (range == null) return null;
+  return _timeOfDayFromString(range.$2);
+}
+
+TimeOfDay _defaultQuickEditEndTime(TimeOfDay start) {
+  final totalMinutes = start.hour * 60 + start.minute + 60;
+  final clampedMinutes = totalMinutes >= 24 * 60
+      ? (23 * 60) + 59
+      : totalMinutes;
+  return TimeOfDay(hour: clampedMinutes ~/ 60, minute: clampedMinutes % 60);
+}
+
+TimeOfDay? _timeOfDayFromString(String value) {
+  final parts = value.trim().split(':');
+  if (parts.isEmpty) return null;
+
+  final hour = int.tryParse(parts.first);
+  final minute = parts.length > 1 ? int.tryParse(parts[1]) : 0;
+  if (hour == null || minute == null) return null;
+
+  return TimeOfDay(hour: hour, minute: minute);
+}
+
+bool _isEndAfterStart(TimeOfDay start, TimeOfDay end) {
+  return (end.hour * 60) + end.minute > (start.hour * 60) + start.minute;
 }
 
 String _displayScheduleTime(Schedule schedule) {
