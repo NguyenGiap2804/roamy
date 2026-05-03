@@ -10,6 +10,8 @@ export const placeRoutes = Router();
 const placeListSchema = z.object({
   query: z.object({
     categoryId: z.uuid().optional(),
+    sort: z.enum(['rating', 'createdAt']).optional(),
+    limit: z.coerce.number().int().min(1).max(50).optional(),
   }),
 });
 

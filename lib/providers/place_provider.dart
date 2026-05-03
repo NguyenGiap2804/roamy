@@ -9,11 +9,13 @@ class PlaceProvider extends ChangeNotifier {
   final PlaceService _placeService;
 
   final List<Place> _places = [];
+  final List<Place> _popularPlaces = [];
   bool _isLoading = false;
   String? _errorMessage;
   int _pendingSyncCount = 0;
 
   List<Place> get places => List.unmodifiable(_places);
+  List<Place> get popularPlaces => List.unmodifiable(_popularPlaces);
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   bool get hasPendingSync => _pendingSyncCount > 0;
@@ -32,6 +34,19 @@ class PlaceProvider extends ChangeNotifier {
       _errorMessage = error.toString();
     } finally {
       _setLoading(false);
+    }
+  }
+
+  Future<void> fetchPopularPlaces({int limit = 5}) async {
+    try {
+      final places = await _placeService.getPopularPlaces(limit: limit);
+      _popularPlaces
+        ..clear()
+        ..addAll(places);
+      notifyListeners();
+    } catch (error) {
+      // Popular places are non-critical; silently fall back to empty list.
+      debugPrint('Failed to fetch popular places: $error');
     }
   }
 

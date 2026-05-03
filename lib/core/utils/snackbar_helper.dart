@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_spacing.dart';
 

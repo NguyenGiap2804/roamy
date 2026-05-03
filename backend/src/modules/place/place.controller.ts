@@ -7,7 +7,9 @@ export class PlaceController {
   async findAll(req: Request, res: Response, next: NextFunction) {
     try {
       const categoryId = typeof req.query.categoryId === 'string' ? req.query.categoryId : undefined;
-      const places = await placeService.findAll(categoryId);
+      const sort = req.query.sort === 'rating' ? 'rating' as const : undefined;
+      const limit = typeof req.query.limit === 'string' ? parseInt(req.query.limit, 10) : undefined;
+      const places = await placeService.findAll({ categoryId, sort, limit: Number.isFinite(limit) ? limit : undefined });
       return sendResponse(res, 200, 'Places fetched successfully', places);
     } catch (error) {
       return next(error);

@@ -17,6 +17,16 @@ class PlaceService {
         .toList();
   }
 
+  Future<List<Place>> getPopularPlaces({int limit = 5}) async {
+    final data = await _apiClient.get(
+      ApiEndpoints.places,
+      query: {'sort': 'rating', 'limit': '$limit'},
+    );
+    return (data as List<dynamic>)
+        .map((item) => Place.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<Place> getPlaceById(String id) async {
     final data = await _apiClient.get(ApiEndpoints.placeById(id));
     return Place.fromJson(data as Map<String, dynamic>);

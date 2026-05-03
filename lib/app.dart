@@ -4,11 +4,14 @@ import 'package:provider/provider.dart';
 import 'core/network/api_client.dart';
 import 'core/theme/app_theme.dart';
 import 'providers/category_provider.dart';
+import 'providers/explore_provider.dart';
 import 'providers/place_provider.dart';
 import 'providers/schedule_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/splash_screen.dart';
 import 'services/category_service.dart';
+import 'services/google_places_service.dart';
+import 'services/location_service.dart';
 import 'services/notification_service.dart';
 import 'services/place_service.dart';
 import 'services/schedule_service.dart';
@@ -33,6 +36,12 @@ class RoamyApp extends StatelessWidget {
         Provider<ScheduleService>(
           create: (context) => ScheduleService(context.read<ApiClient>()),
         ),
+        // ── Explore System services ──
+        Provider<LocationService>.value(value: LocationService.instance),
+        Provider<ExploreApiService>(
+          create: (_) => ExploreApiService(),
+        ),
+        // ── Providers ──
         ChangeNotifierProvider<PlaceProvider>(
           create: (context) => PlaceProvider(context.read<PlaceService>()),
         ),
@@ -48,6 +57,12 @@ class RoamyApp extends StatelessWidget {
         ),
         ChangeNotifierProvider<ThemeProvider>(
           create: (_) => ThemeProvider(),
+        ),
+        ChangeNotifierProvider<ExploreProvider>(
+          create: (context) => ExploreProvider(
+            context.read<ExploreApiService>(),
+            context.read<LocationService>(),
+          ),
         ),
       ],
       child: Consumer<ThemeProvider>(

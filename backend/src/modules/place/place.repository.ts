@@ -22,10 +22,18 @@ export type DuplicatePlaceCandidate = {
 export class PlaceRepository {
   private static readonly duplicateCoordinateWindow = 0.001;
 
-  findAll(categoryId?: string) {
+  findAll(options?: {
+    categoryId?: string;
+    sort?: 'rating' | 'createdAt';
+    limit?: number;
+  }) {
+    const { categoryId, sort, limit } = options ?? {};
     return prisma.place.findMany({
       where: categoryId ? { categoryId } : undefined,
-      orderBy: { createdAt: 'desc' },
+      orderBy: sort === 'rating'
+        ? { rating: 'desc' }
+        : { createdAt: 'desc' },
+      take: limit,
       include: { category: true },
     });
   }

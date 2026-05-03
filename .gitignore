@@ -47,3 +47,4 @@ app.*.map.json
 # Secret keys - never commit these
 ios/Flutter/Secrets.xcconfig
 android/app/src/main/res/values/strings.xml
+lib/core/constants/api_keys.dart

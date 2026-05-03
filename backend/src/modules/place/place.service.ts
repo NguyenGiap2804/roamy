@@ -32,8 +32,12 @@ export class PlaceService {
     > = placeRepository,
   ) {}
 
-  findAll(categoryId?: string) {
-    return this.repository.findAll(categoryId);
+  findAll(options?: {
+    categoryId?: string;
+    sort?: 'rating' | 'createdAt';
+    limit?: number;
+  }) {
+    return this.repository.findAll(options);
   }
 
   async findById(id: string) {

@@ -4,16 +4,12 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
-import '../../models/place.dart';
-import '../../providers/category_provider.dart';
-import '../../providers/place_provider.dart';
+import '../../providers/explore_provider.dart';
 import '../../providers/theme_provider.dart';
-import '../../widgets/category_filter_chip.dart';
-import '../../widgets/empty_state.dart';
-import '../../widgets/place_card.dart';
+import '../../widgets/explore_place_card.dart';
+import '../../widgets/nearby_detail_sheet.dart';
+import '../../widgets/popular_place_card.dart';
 import '../../widgets/section_title.dart';
-import '../add_place/add_place_screen.dart';
-import '../place_detail/place_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -23,44 +19,37 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String _selectedCategory = 'Tất cả';
-  String _searchQuery = '';
+  final _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<PlaceProvider>().fetchPlaces();
-      context.read<CategoryProvider>().fetchCategories();
+      final exploreProvider = context.read<ExploreProvider>();
+      if (!exploreProvider.initialLoadDone) {
+        exploreProvider.fetchNearby();
+      }
     });
   }
 
-  List<Place> _filteredPlaces(List<Place> places) {
-    return places.where((place) {
-      final matchesCategory =
-          _selectedCategory == 'Tất cả' || place.category == _selectedCategory;
-      final query = _searchQuery.trim().toLowerCase();
-      final matchesSearch =
-          query.isEmpty ||
-          place.name.toLowerCase().contains(query) ||
-          place.address.toLowerCase().contains(query);
-      return matchesCategory && matchesSearch;
-    }).toList();
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Consumer2<PlaceProvider, CategoryProvider>(
-        builder: (context, placeProvider, categoryProvider, _) {
-          final categories = [
-            'Tất cả',
-            ...categoryProvider.categories.map((category) => category.name),
-          ];
-          final places = _filteredPlaces(placeProvider.places);
+      child: Consumer<ExploreProvider>(
+        builder: (context, exploreProvider, _) {
+          final isSearchActive = exploreProvider.hasSearchQuery;
 
           return RefreshIndicator(
-            onRefresh: () => placeProvider.fetchPlaces(),
+            onRefresh: () async {
+              _searchController.clear();
+              await exploreProvider.refresh();
+            },
             child: ListView(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.xl,
@@ -69,143 +58,331 @@ class _HomeScreenState extends State<HomeScreen> {
                 96,
               ),
               children: [
-                Consumer<ThemeProvider>(
-                  builder: (context, themeProvider, _) {
-                    return Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Xin chào, Nguyên Giáp 👋',
-                                style: AppTextStyles.headline,
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Bạn muốn đi đâu tiếp theo?',
-                                style: AppTextStyles.subtitle,
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => themeProvider.toggleTheme(),
-                          icon: Icon(
-                            themeProvider.isDarkMode
-                                ? Icons.light_mode_rounded
-                                : Icons.dark_mode_rounded,
-                            color: themeProvider.isDarkMode
-                                ? Colors.amber
-                                : AppColors.textSecondary,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        CircleAvatar(
-                          radius: 24,
-                          backgroundColor: themeProvider.isDarkMode
-                              ? Colors.white10
-                              : AppColors.primarySoft,
-                          child: Text(
-                            'NG',
-                            style: AppTextStyles.caption.copyWith(
-                              color: themeProvider.isDarkMode
-                                  ? Colors.white
-                                  : AppColors.primaryDark,
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
+                // ── Greeting ──
+                _GreetingHeader(exploreProvider: exploreProvider),
                 const SizedBox(height: 22),
+
+                // ── Search bar ──
                 TextField(
-                  onChanged: (value) => setState(() => _searchQuery = value),
-                  decoration: const InputDecoration(
-                    hintText: 'Tìm kiếm địa điểm...',
-                    prefixIcon: Icon(Icons.search_rounded),
+                  controller: _searchController,
+                  onChanged: (value) => exploreProvider.search(value),
+                  decoration: InputDecoration(
+                    hintText: 'Tìm kiếm: cafe, phở, khách sạn...',
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    suffixIcon: isSearchActive
+                        ? IconButton(
+                            icon: const Icon(Icons.close_rounded),
+                            onPressed: () {
+                              _searchController.clear();
+                              exploreProvider.clearSearch();
+                            },
+                          )
+                        : null,
                   ),
                 ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  height: 44,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemBuilder: (context, index) {
-                      final category = categories[index];
-                      return CategoryFilterChip(
-                        label: category,
-                        selected: category == _selectedCategory,
-                        onSelected: (_) =>
-                            setState(() => _selectedCategory = category),
-                      );
-                    },
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(width: 8),
-                    itemCount: categories.length,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                const SectionTitle(
-                  title: 'Địa điểm đã lưu',
-                  icon: Icons.bookmark_rounded,
-                ),
-                if (placeProvider.hasPendingSync) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Dang dong bo thay doi...',
-                    style: AppTextStyles.caption.copyWith(
-                      color: AppColors.primaryDark,
+                const SizedBox(height: 16),
+
+                // ── Category filter chips ──
+                if (!isSearchActive &&
+                    exploreProvider.availableCategories.length > 1)
+                  SizedBox(
+                    height: 40,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: exploreProvider.availableCategories.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, index) {
+                        final cat =
+                            exploreProvider.availableCategories[index];
+                        final isSelected =
+                            cat == exploreProvider.selectedCategory;
+                        return ChoiceChip(
+                          label: Text(cat),
+                          selected: isSelected,
+                          onSelected: (_) =>
+                              exploreProvider.changeCategory(cat),
+                          selectedColor: AppColors.primary,
+                          labelStyle: TextStyle(
+                            color:
+                                isSelected ? Colors.white : null,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          showCheckmark: false,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                          ),
+                        );
+                      },
                     ),
                   ),
-                ],
-                const SizedBox(height: 14),
-                if (placeProvider.isLoading && placeProvider.places.isEmpty)
+                const SizedBox(height: 20),
+
+                // ── Search results mode ──
+                if (isSearchActive) ...[
+                  _SearchResultsSection(exploreProvider: exploreProvider),
+                ]
+
+                // ── Loading state ──
+                else if (exploreProvider.isLoading &&
+                    exploreProvider.nearbyPlaces.isEmpty)
                   const Padding(
-                    padding: EdgeInsets.only(top: 36),
-                    child: Center(child: CircularProgressIndicator()),
+                    padding: EdgeInsets.only(top: 48),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(height: 16),
+                          Text(
+                            'Đang tìm địa điểm gần bạn...',
+                            style: AppTextStyles.subtitle,
+                          ),
+                        ],
+                      ),
+                    ),
                   )
-                else if (placeProvider.errorMessage != null)
-                  EmptyState(
-                    icon: Icons.cloud_off_rounded,
-                    title: 'Không thể tải địa điểm',
-                    message: placeProvider.errorMessage!,
+
+                // ── Error state ──
+                else if (exploreProvider.errorMessage != null &&
+                    exploreProvider.nearbyPlaces.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 36),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.cloud_off_rounded,
+                          size: 48,
+                          color: AppColors.textSecondary.withValues(alpha: 0.5),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          exploreProvider.errorMessage!,
+                          style: AppTextStyles.subtitle,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        OutlinedButton.icon(
+                          onPressed: () => exploreProvider.refresh(),
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('Thử lại'),
+                        ),
+                      ],
+                    ),
                   )
-                else if (places.isEmpty)
-                  const EmptyState(
-                    icon: Icons.search_off_rounded,
-                    title: 'Không tìm thấy địa điểm',
-                    message: 'Hãy thử tìm kiếm khác hoặc chọn danh mục khác.',
-                  )
-                else
-                  ...places.map(
-                    (place) => Padding(
-                      padding: const EdgeInsets.only(bottom: 14),
-                      child: PlaceCard(
-                        place: place,
-                        onUpdate: () async {
-                          await Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => AddPlaceScreen(place: place),
-                            ),
-                          );
-                        },
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => PlaceDetailScreen(place: place),
-                            ),
+
+                // ── Default: Nearby + Popular + Saved ──
+                else ...[
+                  // 📍 Nearby section
+                  if (exploreProvider.nearbyPlaces.isNotEmpty) ...[
+                    const SectionTitle(
+                      title: 'Gần bạn',
+                      icon: Icons.near_me_rounded,
+                    ),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      height: 230,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: exploreProvider.nearbyPlaces.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(width: 14),
+                        itemBuilder: (context, index) {
+                          final place = exploreProvider.nearbyPlaces[index];
+                          return ExplorePlaceCard.fromNearby(
+                            place: place,
+                            onTap: () =>
+                                NearbyDetailSheet.show(context, place),
                           );
                         },
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 28),
+                  ],
+
+                  // 🔥 Popular section (vertical list)
+                  if (exploreProvider.popularPlaces.isNotEmpty) ...[
+                    const SectionTitle(
+                      title: 'Phổ biến nhất',
+                      icon: Icons.local_fire_department_rounded,
+                    ),
+                    const SizedBox(height: 14),
+                    ...List.generate(
+                      exploreProvider.popularPlaces.length,
+                      (index) {
+                        final place = exploreProvider.popularPlaces[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: PopularPlaceCard(
+                            place: place,
+                            index: index,
+                            onTap: () =>
+                                NearbyDetailSheet.show(context, place),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+
+                  // Empty state
+                  if (exploreProvider.nearbyPlaces.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 36),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.explore_off_rounded,
+                            size: 48,
+                            color:
+                                AppColors.textSecondary.withValues(alpha: 0.5),
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Không tìm thấy địa điểm nào trong khu vực này.',
+                            style: AppTextStyles.subtitle,
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
               ],
             ),
           );
         },
       ),
+    );
+  }
+}
+
+// ── Search Results Section ──
+
+class _SearchResultsSection extends StatelessWidget {
+  const _SearchResultsSection({required this.exploreProvider});
+
+  final ExploreProvider exploreProvider;
+
+  @override
+  Widget build(BuildContext context) {
+    if (exploreProvider.isSearching) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 36),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (exploreProvider.searchResults.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 36),
+        child: Column(
+          children: [
+            Icon(
+              Icons.search_off_rounded,
+              size: 48,
+              color: AppColors.textSecondary.withValues(alpha: 0.5),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Không tìm thấy kết quả cho "${exploreProvider.searchQuery}"',
+              style: AppTextStyles.subtitle,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionTitle(
+          title: 'Kết quả tìm kiếm (${exploreProvider.searchResults.length})',
+          icon: Icons.search_rounded,
+        ),
+        const SizedBox(height: 14),
+        SizedBox(
+          height: 230,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: exploreProvider.searchResults.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 14),
+            itemBuilder: (context, index) {
+              final place = exploreProvider.searchResults[index];
+              return ExplorePlaceCard.fromNearby(
+                place: place,
+                onTap: () => NearbyDetailSheet.show(context, place),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Greeting Header ──
+
+class _GreetingHeader extends StatelessWidget {
+  const _GreetingHeader({required this.exploreProvider});
+
+  final ExploreProvider exploreProvider;
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, _) {
+        return Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Khám phá hôm nay 🌏',
+                    style: AppTextStyles.headline,
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Icon(
+                        exploreProvider.isUsingFallbackLocation
+                            ? Icons.location_off_rounded
+                            : Icons.location_on_rounded,
+                        size: 16,
+                        color: AppColors.primary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        exploreProvider.cityName,
+                        style: AppTextStyles.subtitle.copyWith(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            CircleAvatar(
+              radius: 24,
+              backgroundColor: themeProvider.isDarkMode
+                  ? Colors.white10
+                  : AppColors.primarySoft,
+              child: Text(
+                'NG',
+                style: AppTextStyles.caption.copyWith(
+                  color: themeProvider.isDarkMode
+                      ? Colors.white
+                      : AppColors.primaryDark,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
