@@ -76,7 +76,8 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       child: Consumer<CategoryProvider>(
         builder: (context, categoryProvider, _) {
           return RefreshIndicator(
-            onRefresh: categoryProvider.fetchCategories,
+            onRefresh: () =>
+                categoryProvider.fetchCategories(forceRefresh: true),
             child: ListView(
               padding: const EdgeInsets.all(AppSpacing.xl),
               children: [

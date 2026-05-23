@@ -33,7 +33,7 @@ class NearbyPlace {
   /// Address or location description.
   final String address;
 
-  /// Quality rating (1.0 – 5.0) based on data completeness.
+  /// Internal quality score used for sorting nearby results, not a user rating.
   final double rating;
 
   /// GPS coordinates.
@@ -67,7 +67,7 @@ class NearbyPlace {
   /// Safe image URL that returns empty string if null.
   String get safeImageUrl => photoUrl ?? '';
 
-  /// Whether this place has a known rating.
+  /// Whether this place has a usable internal quality score.
   bool get hasRating => rating > 0;
 
   Map<String, dynamic> toAddPlaceDraft({
@@ -83,11 +83,14 @@ class NearbyPlace {
     final draft = <String, dynamic>{
       'name': _firstNonBlank(name, this.name) ?? '',
       'address': _firstNonBlank(address, resolvedAddress, this.address) ?? '',
-      'rating': rating ?? this.rating,
       'latitude': latitude,
       'longitude': longitude,
       'mapsUrl': mapsUrl,
     };
+
+    if (_isGoogleRating(rating)) {
+      draft['rating'] = rating;
+    }
 
     final selectedPriceRange = _firstNonBlank(priceRange);
     if (selectedPriceRange != null) draft['priceRange'] = selectedPriceRange;
@@ -208,6 +211,10 @@ class NearbyPlace {
       ),
     );
   }
+}
+
+bool _isGoogleRating(double? value) {
+  return value != null && value >= 1.0 && value <= 5.0;
 }
 
 String? _firstNonBlank(

@@ -34,13 +34,41 @@ void main() {
   );
 
   test(
+    'fetchPlaces returns cached places without waiting for a second API call',
+    () async {
+      var calls = 0;
+      final secondCall = Completer<List<Place>>();
+      final service = _FakePlaceService(
+        getPlacesHandler: ({String? categoryId}) {
+          calls += 1;
+          if (calls == 1) {
+            return Future.value([_place()]);
+          }
+          return secondCall.future;
+        },
+      );
+      final provider = PlaceProvider(service);
+
+      await provider.fetchPlaces();
+      await expectLater(
+        provider.fetchPlaces().timeout(const Duration(milliseconds: 100)),
+        completes,
+      );
+
+      expect(calls, 1);
+      expect(provider.places, hasLength(1));
+      expect(provider.places.single.name, 'The Cofftea');
+    },
+  );
+
+  test(
     'updatePlace rolls back the optimistic change when backend sync fails',
     () async {
       final updateCompleter = Completer<Place>();
-    final service = _FakePlaceService(
-      places: [_place()],
-      updatePlaceHandler: (ignoredId, ignoredData) => updateCompleter.future,
-    );
+      final service = _FakePlaceService(
+        places: [_place()],
+        updatePlaceHandler: (ignoredId, ignoredData) => updateCompleter.future,
+      );
       final provider = PlaceProvider(service);
       await provider.fetchPlaces();
 
@@ -91,6 +119,7 @@ void main() {
 class _FakePlaceService extends PlaceService {
   _FakePlaceService({
     List<Place>? places,
+    this.getPlacesHandler,
     this.createPlaceHandler,
     this.updatePlaceHandler,
     this.deletePlaceHandler,
@@ -98,6 +127,7 @@ class _FakePlaceService extends PlaceService {
        super(ApiClient(baseUrl: 'https://example.com'));
 
   final List<Place> _places;
+  final Future<List<Place>> Function({String? categoryId})? getPlacesHandler;
   final Future<Place> Function(Map<String, dynamic> data)? createPlaceHandler;
   final Future<Place> Function(String id, Map<String, dynamic> data)?
   updatePlaceHandler;
@@ -105,6 +135,9 @@ class _FakePlaceService extends PlaceService {
 
   @override
   Future<List<Place>> getPlaces({String? categoryId}) async {
+    if (getPlacesHandler != null) {
+      return getPlacesHandler!(categoryId: categoryId);
+    }
     return _places;
   }
 

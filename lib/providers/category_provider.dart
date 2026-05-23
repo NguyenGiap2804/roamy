@@ -12,23 +12,55 @@ class CategoryProvider extends ChangeNotifier {
   final List<Category> _categories = [];
   bool _isLoading = false;
   String? _errorMessage;
+  DateTime? _lastCategoriesFetchAt;
+  Future<void>? _categoriesFetchInFlight;
+
+  static const Duration _categoriesCacheTtl = Duration(minutes: 5);
 
   List<Category> get categories => List.unmodifiable(_categories);
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  Future<void> fetchCategories() async {
-    _setLoading(true);
+  Future<void> fetchCategories({bool forceRefresh = false}) async {
+    if (!forceRefresh && _hasFreshCategoriesCache()) {
+      return;
+    }
+
+    final inFlight = _categoriesFetchInFlight;
+    if (inFlight != null) {
+      return inFlight;
+    }
+
+    final future = _fetchCategoriesFromApi(showLoading: _categories.isEmpty);
+    _categoriesFetchInFlight = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_categoriesFetchInFlight, future)) {
+        _categoriesFetchInFlight = null;
+      }
+    }
+  }
+
+  Future<void> _fetchCategoriesFromApi({required bool showLoading}) async {
+    if (showLoading) _setLoading(true);
     try {
       final categories = await _categoryService.getCategories();
       _categories
         ..clear()
         ..addAll(categories);
+      _lastCategoriesFetchAt = DateTime.now();
       _errorMessage = null;
     } catch (error) {
-      _errorMessage = error.toString();
+      if (_categories.isEmpty) {
+        _errorMessage = error.toString();
+      }
     } finally {
-      _setLoading(false);
+      if (showLoading) {
+        _setLoading(false);
+      } else {
+        notifyListeners();
+      }
     }
   }
 
@@ -48,6 +80,7 @@ class CategoryProvider extends ChangeNotifier {
         'icon': 'category',
       });
       _categories.add(category);
+      _lastCategoriesFetchAt = DateTime.now();
       _errorMessage = null;
       return category;
     } catch (error) {
@@ -80,6 +113,15 @@ class CategoryProvider extends ChangeNotifier {
   void _setLoading(bool value) {
     _isLoading = value;
     notifyListeners();
+  }
+
+  bool _hasFreshCategoriesCache() {
+    final lastFetchAt = _lastCategoriesFetchAt;
+    if (_categories.isEmpty || lastFetchAt == null) {
+      return false;
+    }
+
+    return DateTime.now().difference(lastFetchAt) < _categoriesCacheTtl;
   }
 
   String _normalizeCategoryName(String value) {

@@ -13,6 +13,11 @@ class PlaceProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
   int _pendingSyncCount = 0;
+  DateTime? _lastPlacesFetchAt;
+  String? _lastPlacesCategoryId;
+  Future<void>? _placesFetchInFlight;
+
+  static const Duration _placesCacheTtl = Duration(minutes: 2);
 
   List<Place> get places => List.unmodifiable(_places);
   List<Place> get popularPlaces => List.unmodifiable(_popularPlaces);
@@ -21,19 +26,58 @@ class PlaceProvider extends ChangeNotifier {
   bool get hasPendingSync => _pendingSyncCount > 0;
   bool get isEmpty => _places.isEmpty && !_isLoading && _errorMessage == null;
 
-  Future<void> fetchPlaces({String? categoryId}) async {
-    if (_isLoading) return;
-    _setLoading(true);
+  Future<void> fetchPlaces({
+    String? categoryId,
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh && _hasFreshPlacesCache(categoryId)) {
+      return;
+    }
+
+    final inFlight = _placesFetchInFlight;
+    if (inFlight != null) {
+      return inFlight;
+    }
+
+    final future = _fetchPlacesFromApi(
+      categoryId: categoryId,
+      showLoading: _places.isEmpty,
+    );
+    _placesFetchInFlight = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_placesFetchInFlight, future)) {
+        _placesFetchInFlight = null;
+      }
+    }
+  }
+
+  Future<void> _fetchPlacesFromApi({
+    String? categoryId,
+    required bool showLoading,
+  }) async {
+    if (showLoading) _setLoading(true);
     try {
       final places = await _placeService.getPlaces(categoryId: categoryId);
       _places
         ..clear()
         ..addAll(places);
+      _lastPlacesCategoryId = categoryId;
+      _lastPlacesFetchAt = DateTime.now();
       _errorMessage = null;
     } catch (error) {
-      _errorMessage = error.toString();
+      if (_places.isEmpty) {
+        _errorMessage = error.toString();
+      } else {
+        debugPrint('Failed to refresh places: $error');
+      }
     } finally {
-      _setLoading(false);
+      if (showLoading) {
+        _setLoading(false);
+      } else {
+        notifyListeners();
+      }
     }
   }
 
@@ -73,6 +117,8 @@ class PlaceProvider extends ChangeNotifier {
       } else {
         _places[index] = place;
       }
+      _lastPlacesCategoryId = null;
+      _lastPlacesFetchAt = DateTime.now();
       _errorMessage = null;
     } catch (error) {
       _places.removeWhere((item) => item.id == optimisticPlace.id);
@@ -104,6 +150,7 @@ class PlaceProvider extends ChangeNotifier {
       if (updatedIndex != -1) {
         _places[updatedIndex] = updated;
       }
+      _lastPlacesFetchAt = DateTime.now();
       _errorMessage = null;
     } catch (error) {
       if (previous != null) {
@@ -135,6 +182,7 @@ class PlaceProvider extends ChangeNotifier {
 
     try {
       await _placeService.deletePlace(id);
+      _lastPlacesFetchAt = DateTime.now();
       _errorMessage = null;
     } catch (error) {
       if (removed != null) {
@@ -154,6 +202,19 @@ class PlaceProvider extends ChangeNotifier {
   void _setLoading(bool value) {
     _isLoading = value;
     notifyListeners();
+  }
+
+  bool _hasFreshPlacesCache(String? categoryId) {
+    final lastFetchAt = _lastPlacesFetchAt;
+    if (_places.isEmpty || lastFetchAt == null) {
+      return false;
+    }
+
+    if (_lastPlacesCategoryId != categoryId) {
+      return false;
+    }
+
+    return DateTime.now().difference(lastFetchAt) < _placesCacheTtl;
   }
 
   String _temporaryPlaceId() {

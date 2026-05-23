@@ -51,7 +51,7 @@ class _MeScreenState extends State<MeScreen> {
           final places = _filteredPlaces(placeProvider.places);
 
           return RefreshIndicator(
-            onRefresh: () => placeProvider.fetchPlaces(),
+            onRefresh: () => placeProvider.fetchPlaces(forceRefresh: true),
             child: ListView(
               padding: const EdgeInsets.all(AppSpacing.xl),
               children: [
@@ -210,17 +210,14 @@ class _MeScreenState extends State<MeScreen> {
                         onTap: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) =>
-                                  PlaceDetailScreen(place: place),
+                              builder: (_) => PlaceDetailScreen(place: place),
                             ),
                           );
                         },
                       ),
                     ),
                   ),
-                SizedBox(
-                  height: MediaQuery.of(context).padding.bottom + 24,
-                ),
+                SizedBox(height: MediaQuery.of(context).padding.bottom + 24),
               ],
             ),
           );
@@ -261,10 +258,7 @@ class _StatCard extends StatelessWidget {
         children: [
           Icon(icon, color: AppColors.primary, size: 22),
           const SizedBox(height: 10),
-          Text(
-            value,
-            style: AppTextStyles.title.copyWith(fontSize: 22),
-          ),
+          Text(value, style: AppTextStyles.title.copyWith(fontSize: 22)),
           const SizedBox(height: 2),
           Text(label, style: AppTextStyles.caption),
         ],
@@ -316,7 +310,10 @@ class _QuickLinkTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: AppTextStyles.title.copyWith(fontSize: 16)),
+                  Text(
+                    label,
+                    style: AppTextStyles.title.copyWith(fontSize: 16),
+                  ),
                   const SizedBox(height: 2),
                   Text(subtitle, style: AppTextStyles.caption),
                 ],

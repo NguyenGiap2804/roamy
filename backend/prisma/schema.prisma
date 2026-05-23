@@ -35,6 +35,8 @@ model Place {
   schedules    Schedule[]
 
   @@index([categoryId])
+  @@index([createdAt])
+  @@index([rating])
 }
 
 model Schedule {

@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
-import { ValidationError } from '../../utils/errors';
+import { AppError, ValidationError } from '../../utils/errors';
 
 const uploadsDir = path.join(process.cwd(), 'uploads');
 
@@ -23,6 +23,14 @@ export class UploadService {
 
     if (this.hasCloudinaryConfig()) {
       return this.uploadToCloudinary(file);
+    }
+
+    if (process.env.NODE_ENV === 'production') {
+      throw new AppError(
+        503,
+        'Image storage is not configured. Set Cloudinary environment variables before accepting uploads.',
+        { missingEnvVars: this.missingCloudinaryEnvVars() },
+      );
     }
 
     return this.uploadToLocalDisk(file, requestOrigin);
@@ -75,6 +83,14 @@ export class UploadService {
         process.env.CLOUDINARY_API_KEY &&
         process.env.CLOUDINARY_API_SECRET,
     );
+  }
+
+  private missingCloudinaryEnvVars() {
+    return [
+      'CLOUDINARY_CLOUD_NAME',
+      'CLOUDINARY_API_KEY',
+      'CLOUDINARY_API_SECRET',
+    ].filter((key) => !process.env[key]);
   }
 }
 

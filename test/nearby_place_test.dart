@@ -70,6 +70,24 @@ void main() {
     expect(draft['longitude'], 105.958843);
   });
 
+  test('does not save nearby quality score as a star rating', () {
+    const place = NearbyPlace(
+      placeId: 'node/45',
+      name: 'AN Kinh Bac - Den Do',
+      address: '18 Pho Co Phap',
+      rating: 2.3,
+      latitude: 21.080670,
+      longitude: 105.958843,
+      category: 'Cafe',
+      categoryBase: 'Cafe',
+      mapsUrl: 'https://www.google.com/maps/search/?api=1&query=AN',
+    );
+
+    final draft = place.toAddPlaceDraft();
+
+    expect(draft.containsKey('rating'), isFalse);
+  });
+
   test('builds add-place draft with enriched Google Maps details first', () {
     const place = NearbyPlace(
       placeId: 'node/46',

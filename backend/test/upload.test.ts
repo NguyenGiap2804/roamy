@@ -5,9 +5,11 @@ import type { NextFunction, Request, Response } from 'express';
 
 import { ValidationError } from '../src/utils/errors';
 import {
+  UploadService,
   validateUploadedImage,
 } from '../src/modules/upload/upload.service';
 import { createUploadHandler } from '../src/modules/upload/upload.routes';
+import { AppError } from '../src/utils/errors';
 
 test('validateUploadedImage rejects files with unsupported mime types', () => {
   const file = createFile({
@@ -55,6 +57,82 @@ test('validateUploadedImage accepts a valid png signature', () => {
   });
 
   assert.doesNotThrow(() => validateUploadedImage(file));
+});
+
+test('production uploads fail fast when durable image storage is not configured', async () => {
+  const restoreEnv = withUploadEnv({
+    NODE_ENV: 'production',
+    CLOUDINARY_CLOUD_NAME: undefined,
+    CLOUDINARY_API_KEY: undefined,
+    CLOUDINARY_API_SECRET: undefined,
+  });
+
+  try {
+    const service = new UploadService();
+    await assert.rejects(
+      () =>
+        service.uploadImage(
+          createFile({
+            mimetype: 'image/png',
+            buffer: Buffer.from([
+              0x89,
+              0x50,
+              0x4e,
+              0x47,
+              0x0d,
+              0x0a,
+              0x1a,
+              0x0a,
+              0x00,
+            ]),
+          }),
+          'https://roamy-backend.example.com',
+        ),
+      (error: unknown) => {
+        assert(error instanceof AppError);
+        assert.equal(error.statusCode, 503);
+        assert.match(error.message, /Image storage is not configured/);
+        return true;
+      },
+    );
+  } finally {
+    restoreEnv();
+  }
+});
+
+test('development uploads may use local disk fallback', async () => {
+  const restoreEnv = withUploadEnv({
+    NODE_ENV: 'development',
+    CLOUDINARY_CLOUD_NAME: undefined,
+    CLOUDINARY_API_KEY: undefined,
+    CLOUDINARY_API_SECRET: undefined,
+  });
+
+  try {
+    const service = new UploadService();
+    const url = await service.uploadImage(
+      createFile({
+        mimetype: 'image/png',
+        originalname: 'upload.png',
+        buffer: Buffer.from([
+          0x89,
+          0x50,
+          0x4e,
+          0x47,
+          0x0d,
+          0x0a,
+          0x1a,
+          0x0a,
+          0x00,
+        ]),
+      }),
+      'http://localhost:4000',
+    );
+
+    assert.match(url, /^http:\/\/localhost:4000\/uploads\/.+\.png$/);
+  } finally {
+    restoreEnv();
+  }
 });
 
 test('upload handler forwards missing file errors as validation errors', async () => {
@@ -135,13 +213,15 @@ function createResponse() {
 function createFile({
   mimetype,
   buffer,
+  originalname = 'upload.bin',
 }: {
   mimetype: string;
   buffer: Buffer;
+  originalname?: string;
 }) {
   return {
     fieldname: 'image',
-    originalname: 'upload.bin',
+    originalname,
     encoding: '7bit',
     mimetype,
     size: buffer.length,
@@ -151,4 +231,26 @@ function createFile({
     filename: '',
     path: '',
   } as Express.Multer.File;
+}
+
+function withUploadEnv(values: Record<string, string | undefined>) {
+  const previous = new Map<string, string | undefined>();
+  for (const [key, value] of Object.entries(values)) {
+    previous.set(key, process.env[key]);
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+
+  return () => {
+    for (const [key, value] of previous.entries()) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  };
 }

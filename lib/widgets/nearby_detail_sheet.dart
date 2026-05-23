@@ -86,8 +86,8 @@ class _NearbyDetailSheetState extends State<NearbyDetailSheet> {
     return _firstNonBlank(_googleMapsDetails?.name, place.name) ?? place.name;
   }
 
-  double get _displayRating {
-    return _googleMapsDetails?.rating ?? place.rating;
+  double? get _displayRating {
+    return _googleMapsDetails?.rating;
   }
 
   String? get _displayPriceRange {
@@ -247,10 +247,10 @@ class _NearbyDetailSheetState extends State<NearbyDetailSheet> {
                 ),
               ),
 
-            if (_displayRating > 0)
+            if (_displayRating != null)
               _DetailRow(
                 icon: Icons.star_rounded,
-                text: '${_displayRating.toStringAsFixed(1)}/5',
+                text: '${_displayRating!.toStringAsFixed(1)}/5',
               ),
 
             if (_displayPriceRange != null)
