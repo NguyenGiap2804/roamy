@@ -18,6 +18,7 @@ import '../../providers/category_provider.dart';
 import '../../providers/place_provider.dart';
 import '../../services/google_maps_extraction_service.dart';
 import '../../widgets/primary_button.dart';
+import '../../widgets/rating_stars.dart';
 
 class AddPlaceScreen extends StatefulWidget {
   const AddPlaceScreen({super.key, this.place, this.prefilledDraft});
@@ -48,6 +49,8 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
   final _phoneController = TextEditingController();
   final _noteController = TextEditingController();
   final _imageUrlController = TextEditingController();
+  final _formScrollController = ScrollController();
+  final _detailsSectionKey = GlobalKey();
 
   final ImagePicker _picker = ImagePicker();
   final GoogleMapsExtractionService _mapsExtractionService =
@@ -64,6 +67,17 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
   bool get _isDuplicateResolutionMode => widget.prefilledDraft != null;
 
   bool get _isEditing => widget.place != null;
+  bool get _hasPreviewData {
+    return _nameController.text.trim().isNotEmpty ||
+        _addressController.text.trim().isNotEmpty ||
+        _imageUrlController.text.trim().isNotEmpty ||
+        _priceRangeController.text.trim().isNotEmpty ||
+        _openingHoursController.text.trim().isNotEmpty ||
+        _phoneController.text.trim().isNotEmpty ||
+        _selectedImage != null ||
+        _latitude != null ||
+        _longitude != null;
+  }
 
   @override
   void initState() {
@@ -85,6 +99,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     _phoneController.dispose();
     _noteController.dispose();
     _imageUrlController.dispose();
+    _formScrollController.dispose();
     super.dispose();
   }
 
@@ -331,6 +346,40 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     });
   }
 
+  void _handlePreviewFieldChanged(String _) {
+    setState(() {});
+  }
+
+  void _scrollToDetailsForm() {
+    final detailsContext = _detailsSectionKey.currentContext;
+    if (detailsContext != null) {
+      Scrollable.ensureVisible(
+        detailsContext,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+        alignment: 0.08,
+      );
+      return;
+    }
+
+    if (!_formScrollController.hasClients) return;
+    _formScrollController.animateTo(
+      _formScrollController.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  String _previewCategoryName(CategoryProvider categoryProvider) {
+    final categoryId = _selectedCategoryId;
+    if (categoryId == null) {
+      return _draftString(widget.prefilledDraft?['categoryName']) ?? 'Danh mục';
+    }
+    return categoryProvider.findById(categoryId)?.name ??
+        _draftString(widget.prefilledDraft?['categoryName']) ??
+        'Danh mục';
+  }
+
   void _updateField(TextEditingController controller, String? value) {
     if (value == null || value.trim().isEmpty) return;
     controller.text = value.trim();
@@ -543,6 +592,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
             return Form(
               key: _formKey,
               child: ListView(
+                controller: _formScrollController,
                 padding: const EdgeInsets.fromLTRB(
                   AppSpacing.xl,
                   AppSpacing.lg,
@@ -577,7 +627,10 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                           label: 'Liên kết Google Maps',
                           icon: Icons.link_rounded,
                           requiredField: false,
-                          onChanged: (_) => _resetExtractionReview(),
+                          onChanged: (value) {
+                            _resetExtractionReview();
+                            _handlePreviewFieldChanged(value);
+                          },
                         ),
                       ),
                       Padding(
@@ -609,10 +662,37 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                       onDismiss: () =>
                           setState(() => _showExtractionReview = false),
                     ),
-                  _Input(
-                    controller: _nameController,
-                    label: 'Tên địa điểm',
-                    icon: Icons.place_rounded,
+                  if (_isAutoFilling || _hasPreviewData) ...[
+                    _PlacePreviewCard(
+                      key: const Key('addPlacePreviewCard'),
+                      isLoading: _isAutoFilling,
+                      name: _nameController.text.trim(),
+                      category: _previewCategoryName(categoryProvider),
+                      address: _addressController.text.trim(),
+                      priceRange: _priceRangeController.text.trim(),
+                      openingHours: _openingHoursController.text.trim(),
+                      phone: _phoneController.text.trim(),
+                      imageUrl: _imageUrlController.text.trim(),
+                      selectedImage: _selectedImage,
+                      rating: _rating,
+                      isSaving: _isSaving,
+                      onEdit: _scrollToDetailsForm,
+                      onSave: _save,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  KeyedSubtree(
+                    key: _detailsSectionKey,
+                    child: KeyedSubtree(
+                      key: const Key('addPlaceDetailsSection'),
+                      child: _Input(
+                        key: const Key('addPlaceNameField'),
+                        controller: _nameController,
+                        label: 'Tên địa điểm',
+                        icon: Icons.place_rounded,
+                        onChanged: _handlePreviewFieldChanged,
+                      ),
+                    ),
                   ),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -650,21 +730,25 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                   ),
                   const SizedBox(height: 14),
                   _Input(
+                    key: const Key('addPlaceAddressField'),
                     controller: _addressController,
                     label: 'Địa chỉ',
                     icon: Icons.location_on_rounded,
+                    onChanged: _handlePreviewFieldChanged,
                   ),
                   _Input(
                     controller: _priceRangeController,
                     label: 'Khoảng giá',
                     icon: Icons.payments_rounded,
                     requiredField: false,
+                    onChanged: _handlePreviewFieldChanged,
                   ),
                   _Input(
                     controller: _openingHoursController,
                     label: 'Giờ mở cửa',
                     icon: Icons.schedule_rounded,
                     requiredField: false,
+                    onChanged: _handlePreviewFieldChanged,
                   ),
                   _Input(
                     controller: _phoneController,
@@ -672,6 +756,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                     icon: Icons.phone_rounded,
                     keyboardType: TextInputType.phone,
                     requiredField: false,
+                    onChanged: _handlePreviewFieldChanged,
                   ),
                   const Text(
                     'Hình ảnh địa điểm',
@@ -805,6 +890,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                       ),
                     ),
                   PrimaryButton(
+                    key: const Key('addPlaceFormSaveButton'),
                     label: _isSaving
                         ? 'Đang lưu...'
                         : (_isEditing ? 'Cập nhật địa điểm' : 'Lưu địa điểm'),
@@ -816,6 +902,361 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
               ),
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+class _PlacePreviewCard extends StatelessWidget {
+  const _PlacePreviewCard({
+    super.key,
+    required this.isLoading,
+    required this.name,
+    required this.category,
+    required this.address,
+    required this.priceRange,
+    required this.openingHours,
+    required this.phone,
+    required this.imageUrl,
+    required this.selectedImage,
+    required this.rating,
+    required this.isSaving,
+    required this.onEdit,
+    required this.onSave,
+  });
+
+  final bool isLoading;
+  final String name;
+  final String category;
+  final String address;
+  final String priceRange;
+  final String openingHours;
+  final String phone;
+  final String imageUrl;
+  final File? selectedImage;
+  final double rating;
+  final bool isSaving;
+  final VoidCallback onEdit;
+  final VoidCallback onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: theme.dividerColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: isLoading ? const _PlacePreviewSkeleton() : _buildPreview(context),
+    );
+  }
+
+  Widget _buildPreview(BuildContext context) {
+    final displayName = name.isEmpty ? 'Địa điểm mới' : name;
+    final hasAddress = address.isNotEmpty;
+    final hasPriceRange = priceRange.isNotEmpty;
+    final hasOpeningHours = openingHours.isNotEmpty;
+    final hasPhone = phone.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _PreviewImage(
+          selectedImage: selectedImage,
+          imageUrl: imageUrl,
+          name: displayName,
+        ),
+        Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      displayName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.title.copyWith(fontSize: 20),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  _PreviewChip(label: category),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              RatingStars(
+                rating: rating,
+                compact: true,
+                textColor: Theme.of(context).colorScheme.onSurface,
+              ),
+              if (hasAddress) ...[
+                const SizedBox(height: AppSpacing.md),
+                _PreviewMetaRow(icon: Icons.location_on_rounded, text: address),
+              ],
+              if (hasOpeningHours)
+                _PreviewMetaRow(
+                  icon: Icons.schedule_rounded,
+                  text: openingHours,
+                ),
+              if (hasPhone)
+                _PreviewMetaRow(icon: Icons.phone_rounded, text: phone),
+              if (hasPriceRange)
+                _PreviewMetaRow(icon: Icons.payments_rounded, text: priceRange),
+              const SizedBox(height: AppSpacing.lg),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      key: const Key('addPlacePreviewEditButton'),
+                      onPressed: onEdit,
+                      icon: const Icon(Icons.edit_rounded),
+                      label: const Text('Chỉnh sửa'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: FilledButton.icon(
+                      key: const Key('addPlacePreviewSaveButton'),
+                      onPressed: isSaving ? null : onSave,
+                      icon: isSaving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.bookmark_add_rounded),
+                      label: Text(isSaving ? 'Đang lưu...' : 'Lưu địa điểm'),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PreviewImage extends StatelessWidget {
+  const _PreviewImage({
+    required this.selectedImage,
+    required this.imageUrl,
+    required this.name,
+  });
+
+  final File? selectedImage;
+  final String imageUrl;
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = selectedImage;
+    if (selected != null) {
+      return Image.file(
+        selected,
+        height: 172,
+        width: double.infinity,
+        fit: BoxFit.cover,
+      );
+    }
+
+    if (imageUrl.isNotEmpty) {
+      return Image.network(
+        imageUrl,
+        height: 172,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _fallback(context),
+      );
+    }
+
+    return _fallback(context);
+  }
+
+  Widget _fallback(BuildContext context) {
+    return Container(
+      height: 172,
+      width: double.infinity,
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.primarySoft, Color(0xFFE9F7F4)],
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.68),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.place_rounded,
+              color: AppColors.primary,
+              size: 30,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.title.copyWith(color: AppColors.primaryDark),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewMetaRow extends StatelessWidget {
+  const _PreviewMetaRow({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 17, color: AppColors.textSecondary),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              text,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewChip extends StatelessWidget {
+  const _PreviewChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Theme.of(context).brightness == Brightness.dark
+            ? AppColors.primary.withValues(alpha: 0.16)
+            : AppColors.primarySoft,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.sell_rounded, size: 13, color: AppColors.primary),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.primaryDark,
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlacePreviewSkeleton extends StatelessWidget {
+  const _PlacePreviewSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SkeletonBox(height: 150, borderRadius: BorderRadius.circular(16)),
+          const SizedBox(height: AppSpacing.lg),
+          const _SkeletonBox(widthFactor: 0.7, height: 20),
+          const SizedBox(height: AppSpacing.sm),
+          const _SkeletonBox(widthFactor: 0.45, height: 14),
+          const SizedBox(height: AppSpacing.md),
+          const _SkeletonBox(widthFactor: 0.9, height: 14),
+          const SizedBox(height: AppSpacing.sm),
+          const _SkeletonBox(widthFactor: 0.62, height: 14),
+        ],
+      ),
+    );
+  }
+}
+
+class _SkeletonBox extends StatelessWidget {
+  const _SkeletonBox({
+    this.widthFactor = 1,
+    required this.height,
+    this.borderRadius,
+  });
+
+  final double widthFactor;
+  final double height;
+  final BorderRadius? borderRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    return FractionallySizedBox(
+      widthFactor: widthFactor,
+      child: Container(
+        height: height,
+        decoration: BoxDecoration(
+          color: Theme.of(context).dividerColor.withValues(alpha: 0.35),
+          borderRadius: borderRadius ?? BorderRadius.circular(999),
         ),
       ),
     );
@@ -1186,6 +1627,7 @@ class _ExtractionReviewCard extends StatelessWidget {
 
 class _Input extends StatelessWidget {
   const _Input({
+    super.key,
     required this.controller,
     required this.label,
     required this.icon,
