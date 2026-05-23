@@ -2,12 +2,19 @@ import { NextFunction, Request, Response } from 'express';
 
 import { loginAdmin } from './admin.auth';
 import { adminService, AdminListOptions } from './admin.service';
+import { categoryService } from '../category/category.service';
+import { observabilityService } from '../observability/observability.service';
+import { placeService } from '../place/place.service';
+import { scheduleService } from '../schedule/schedule.service';
 import { sendResponse } from '../../utils/response';
 
 export class AdminController {
   login(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = loginAdmin(String(req.body?.email ?? ''), String(req.body?.password ?? ''));
+      const result = loginAdmin(
+        String(req.body?.email ?? ''),
+        String(req.body?.password ?? ''),
+      );
       return sendResponse(res, 200, 'Admin logged in successfully', result);
     } catch (error) {
       return next(error);
@@ -50,6 +57,93 @@ export class AdminController {
     adminService.listUploads(listOptions(req)),
   );
 
+  updatePlace = this.mutate('Admin place updated successfully', async (req) => {
+    const place = await placeService.update(req.params.id as string, req.body);
+    await recordAdminEvent(req, {
+      action: 'place.update',
+      resourceType: 'place',
+      resourceId: place.id,
+      message: `Admin updated place ${place.name}`,
+      changedFields: Object.keys(req.body ?? {}),
+    });
+    return place;
+  });
+
+  deletePlace = this.mutate('Admin place deleted successfully', async (req) => {
+    const deleted = await placeService.delete(req.params.id as string);
+    await recordAdminEvent(req, {
+      action: 'place.delete',
+      resourceType: 'place',
+      resourceId: deleted.id,
+      message: `Admin deleted place ${deleted.id}`,
+    });
+    return deleted;
+  });
+
+  updateCategory = this.mutate(
+    'Admin category updated successfully',
+    async (req) => {
+      const category = await categoryService.update(
+        req.params.id as string,
+        req.body,
+      );
+      await recordAdminEvent(req, {
+        action: 'category.update',
+        resourceType: 'category',
+        resourceId: category.id,
+        message: `Admin updated category ${category.name}`,
+        changedFields: Object.keys(req.body ?? {}),
+      });
+      return category;
+    },
+  );
+
+  deleteCategory = this.mutate(
+    'Admin category deleted successfully',
+    async (req) => {
+      const deleted = await categoryService.delete(req.params.id as string);
+      await recordAdminEvent(req, {
+        action: 'category.delete',
+        resourceType: 'category',
+        resourceId: deleted.id,
+        message: `Admin deleted category ${deleted.id}`,
+      });
+      return deleted;
+    },
+  );
+
+  updateSchedule = this.mutate(
+    'Admin schedule updated successfully',
+    async (req) => {
+      const schedule = await scheduleService.update(
+        req.params.id as string,
+        req.body,
+      );
+      await recordAdminEvent(req, {
+        action: 'schedule.update',
+        resourceType: 'schedule',
+        resourceId: schedule.id,
+        message: `Admin updated schedule ${schedule.id}`,
+        changedFields: Object.keys(req.body ?? {}),
+      });
+      return schedule;
+    },
+  );
+
+  deleteSchedule = this.mutate(
+    'Admin schedule deleted successfully',
+    async (req) => {
+      const deleted = await scheduleService.delete(req.params.id as string);
+      await recordAdminEvent(req, {
+        action: 'schedule.delete',
+        resourceType: 'schedule',
+        resourceId: deleted.id,
+        message: `Admin deleted schedule ${deleted.id}`,
+      });
+      return deleted;
+    },
+  );
+
   private handle<T>(
     message: string,
     load: (req: Request) => Promise<T>,
@@ -57,6 +151,20 @@ export class AdminController {
     return async (req: Request, res: Response, next: NextFunction) => {
       try {
         const data = await load(req);
+        return sendResponse(res, 200, message, data);
+      } catch (error) {
+        return next(error);
+      }
+    };
+  }
+
+  private mutate<T>(
+    message: string,
+    operation: (req: Request) => Promise<T>,
+  ) {
+    return async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const data = await operation(req);
         return sendResponse(res, 200, message, data);
       } catch (error) {
         return next(error);
@@ -74,7 +182,37 @@ function listOptions(req: Request): AdminListOptions {
     limit: numberQuery(req.query.limit),
     status: stringQuery(req.query.status),
     type: stringQuery(req.query.type),
+    severity: stringQuery(req.query.severity),
+    categoryId: stringQuery(req.query.categoryId),
+    imageStatus: stringQuery(req.query.imageStatus),
+    minRating: numberQuery(req.query.minRating),
+    from: stringQuery(req.query.from),
+    to: stringQuery(req.query.to),
   };
+}
+
+async function recordAdminEvent(
+  req: Request,
+  input: {
+    action: string;
+    resourceType: string;
+    resourceId: string;
+    message: string;
+    changedFields?: string[];
+  },
+) {
+  await observabilityService.recordSystemEvent({
+    type: 'admin',
+    action: input.action,
+    resourceType: input.resourceType,
+    resourceId: input.resourceId,
+    message: input.message,
+    deviceId: req.deviceId,
+    requestId: req.requestId,
+    metadata: input.changedFields
+      ? { changedFields: input.changedFields }
+      : undefined,
+  });
 }
 
 function stringQuery(value: unknown) {
@@ -82,5 +220,10 @@ function stringQuery(value: unknown) {
 }
 
 function numberQuery(value: unknown) {
-  return typeof value === 'string' ? Number(value) : undefined;
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }

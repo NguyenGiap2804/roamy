@@ -1,5 +1,5 @@
 import { prisma } from '../../config/db';
-import { CategoryCreateInput } from './category.model';
+import { CategoryCreateInput, CategoryUpdateInput } from './category.model';
 
 export class CategoryRepository {
   findAll() {
@@ -24,8 +24,35 @@ export class CategoryRepository {
     });
   }
 
+  findById(id: string) {
+    return prisma.category.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: { places: true },
+        },
+      },
+    });
+  }
+
   create(data: CategoryCreateInput) {
     return prisma.category.create({ data });
+  }
+
+  update(id: string, data: CategoryUpdateInput) {
+    return prisma.category.update({
+      where: { id },
+      data,
+      include: {
+        _count: {
+          select: { places: true },
+        },
+      },
+    });
+  }
+
+  delete(id: string) {
+    return prisma.category.delete({ where: { id } });
   }
 }
 

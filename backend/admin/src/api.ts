@@ -1,19 +1,28 @@
 import type {
   AdminSession,
+  ApiEnvelope,
   ApiErrorLog,
   ApiRequestLog,
   Category,
+  CategoryUpdatePayload,
   Health,
   ImageAsset,
   ListResponse,
   Overview,
   Place,
+  PlaceUpdatePayload,
   Schedule,
+  ScheduleUpdatePayload,
   SystemEvent,
-  ApiEnvelope,
 } from './types';
 
 const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
+export class AuthExpiredError extends Error {
+  constructor() {
+    super('Phiên đăng nhập đã hết hạn');
+  }
+}
 
 export class AdminApi {
   constructor(private readonly token: string | null) {}
@@ -38,27 +47,78 @@ export class AdminApi {
   }
 
   categories(query: QueryOptions) {
-    return this.request<ListResponse<Category>>(`/admin/categories${toSearch(query)}`);
+    return this.request<ListResponse<Category>>(
+      `/admin/categories${toSearch(query)}`,
+    );
   }
 
   schedules(query: QueryOptions) {
-    return this.request<ListResponse<Schedule>>(`/admin/schedules${toSearch(query)}`);
+    return this.request<ListResponse<Schedule>>(
+      `/admin/schedules${toSearch(query)}`,
+    );
   }
 
   activity(query: QueryOptions) {
-    return this.request<ListResponse<SystemEvent>>(`/admin/activity${toSearch(query)}`);
+    return this.request<ListResponse<SystemEvent>>(
+      `/admin/activity${toSearch(query)}`,
+    );
   }
 
   errors(query: QueryOptions) {
-    return this.request<ListResponse<ApiErrorLog>>(`/admin/errors${toSearch(query)}`);
+    return this.request<ListResponse<ApiErrorLog>>(
+      `/admin/errors${toSearch(query)}`,
+    );
   }
 
   requests(query: QueryOptions) {
-    return this.request<ListResponse<ApiRequestLog>>(`/admin/requests${toSearch(query)}`);
+    return this.request<ListResponse<ApiRequestLog>>(
+      `/admin/requests${toSearch(query)}`,
+    );
   }
 
   uploads(query: QueryOptions) {
-    return this.request<ListResponse<ImageAsset>>(`/admin/uploads${toSearch(query)}`);
+    return this.request<ListResponse<ImageAsset>>(
+      `/admin/uploads${toSearch(query)}`,
+    );
+  }
+
+  updatePlace(id: string, payload: PlaceUpdatePayload) {
+    return this.request<Place>(`/admin/places/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  deletePlace(id: string) {
+    return this.request<{ id: string }>(`/admin/places/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  updateCategory(id: string, payload: CategoryUpdatePayload) {
+    return this.request<Category>(`/admin/categories/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  deleteCategory(id: string) {
+    return this.request<{ id: string }>(`/admin/categories/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  updateSchedule(id: string, payload: ScheduleUpdatePayload) {
+    return this.request<Schedule>(`/admin/schedules/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  deleteSchedule(id: string) {
+    return this.request<{ id: string }>(`/admin/schedules/${id}`, {
+      method: 'DELETE',
+    });
   }
 
   private async request<T>(path: string, init: RequestInit = {}) {
@@ -81,6 +141,9 @@ export class AdminApi {
     }
 
     if (!response.ok) {
+      if (response.status === 401 && this.token) {
+        throw new AuthExpiredError();
+      }
       throw new Error(envelope.message || 'Request failed');
     }
 
@@ -94,6 +157,12 @@ export type QueryOptions = {
   limit?: number;
   status?: string;
   type?: string;
+  severity?: string;
+  categoryId?: string;
+  imageStatus?: string;
+  minRating?: string | number;
+  from?: string;
+  to?: string;
 };
 
 function toSearch(query: QueryOptions) {

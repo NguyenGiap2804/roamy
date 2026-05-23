@@ -2,6 +2,16 @@ import { Router } from 'express';
 
 import { adminController } from './admin.controller';
 import { authenticateAdmin } from './admin.auth';
+import { validate } from '../../utils/validate';
+import {
+  categoryIdSchema,
+  categoryUpdateSchema,
+} from '../category/category.model';
+import { placeIdSchema, placeUpdateSchema } from '../place/place.model';
+import {
+  scheduleIdSchema,
+  scheduleUpdateSchema,
+} from '../schedule/schedule.model';
 
 export const adminRoutes = Router();
 
@@ -16,3 +26,25 @@ adminRoutes.get('/activity', adminController.activity);
 adminRoutes.get('/errors', adminController.errors);
 adminRoutes.get('/requests', adminController.requests);
 adminRoutes.get('/uploads', adminController.uploads);
+adminRoutes.patch('/places/:id', validate(placeUpdateSchema), adminController.updatePlace);
+adminRoutes.delete('/places/:id', validate(placeIdSchema), adminController.deletePlace);
+adminRoutes.patch(
+  '/categories/:id',
+  validate(categoryUpdateSchema),
+  adminController.updateCategory,
+);
+adminRoutes.delete(
+  '/categories/:id',
+  validate(categoryIdSchema),
+  adminController.deleteCategory,
+);
+adminRoutes.patch(
+  '/schedules/:id',
+  validate(scheduleUpdateSchema),
+  adminController.updateSchedule,
+);
+adminRoutes.delete(
+  '/schedules/:id',
+  validate(scheduleIdSchema),
+  adminController.deleteSchedule,
+);

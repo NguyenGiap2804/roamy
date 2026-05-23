@@ -23,12 +23,14 @@ export type Category = {
 export type Place = {
   id: string;
   name: string;
+  categoryId: string;
   address: string;
   priceRange: string;
   openingHours: string;
   phone?: string | null;
   website?: string | null;
   mapsUrl?: string | null;
+  note?: string | null;
   imageUrl?: string | null;
   rating: number;
   latitude?: number | null;
@@ -109,6 +111,9 @@ export type ImageAsset = {
 
 export type ListResponse<T> = {
   total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
   items: T[];
 };
 
@@ -125,6 +130,12 @@ export type Overview = {
   latestActivity: SystemEvent[];
   latestErrors: ApiErrorLog[];
   latestPlaces: Place[];
+  attention?: {
+    latestErrors: ApiErrorLog[];
+    slowRequests: ApiRequestLog[];
+    failedUploads: ImageAsset[];
+    cloudinaryMissing: boolean;
+  };
 };
 
 export type Health = {
@@ -144,3 +155,33 @@ export type Health = {
     renderUrl?: string | null;
   };
 };
+
+export type PlaceUpdatePayload = Partial<{
+  name: string;
+  categoryId: string;
+  address: string;
+  priceRange: string | null;
+  openingHours: string | null;
+  phone: string | null;
+  website: string | null;
+  mapsUrl: string | null;
+  note: string | null;
+  imageUrl: string | null;
+  rating: number;
+  hasReminder: boolean;
+  latitude: number | null;
+  longitude: number | null;
+}>;
+
+export type CategoryUpdatePayload = Partial<{
+  name: string;
+  icon: string;
+}>;
+
+export type ScheduleUpdatePayload = Partial<{
+  placeId: string;
+  date: string;
+  time: string;
+  status: Schedule['status'];
+  hasReminder: boolean;
+}>;
