@@ -19,6 +19,7 @@ import '../../providers/place_provider.dart';
 import '../../services/google_maps_extraction_service.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/rating_stars.dart';
+import 'image_sync_status.dart';
 
 class AddPlaceScreen extends StatefulWidget {
   const AddPlaceScreen({
@@ -65,7 +66,9 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
   String? _selectedCategoryId;
   double _rating = 4.5;
   bool _isSaving = false;
+  bool _isUploadingImage = false;
   bool _isAutoFilling = false;
+  String? _imageUploadError;
   double? _latitude;
   double? _longitude;
   GoogleMapsExtractionReview? _extractionReview;
@@ -73,6 +76,15 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
   bool get _isDuplicateResolutionMode => widget.prefilledDraft != null;
 
   bool get _isEditing => widget.place != null;
+  ImageSyncStatus? get _imageSyncStatus {
+    return resolveImageSyncStatus(
+      imageUrl: _imageUrlController.text,
+      hasSelectedImage: _selectedImage != null,
+      isUploadingImage: _isUploadingImage,
+      uploadError: _imageUploadError,
+    );
+  }
+
   bool get _hasPreviewData {
     return _nameController.text.trim().isNotEmpty ||
         _addressController.text.trim().isNotEmpty ||
@@ -178,7 +190,10 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
       maxHeight: 1600,
     );
     if (pickedFile != null) {
-      setState(() => _selectedImage = File(pickedFile.path));
+      setState(() {
+        _selectedImage = File(pickedFile.path);
+        _imageUploadError = null;
+      });
     }
   }
 
@@ -351,7 +366,13 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     );
     _updateField(_phoneController, data.phone, onlyMissing: onlyMissing);
     _updateField(_websiteController, data.website, onlyMissing: onlyMissing);
+    final hadImageUrl = _imageUrlController.text.trim().isNotEmpty;
     _updateField(_imageUrlController, data.imageUrl, onlyMissing: onlyMissing);
+    final hasNewImageUrl =
+        !hadImageUrl && _imageUrlController.text.trim().isNotEmpty;
+    if (hasNewImageUrl) {
+      _imageUploadError = null;
+    }
     _rating = data.rating != null ? _clampRating(data.rating!) : _rating;
     _latitude = data.latitude ?? _latitude;
     _longitude = data.longitude ?? _longitude;
@@ -484,16 +505,33 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     final navigator = Navigator.of(context);
     final categoryName = categoryProvider.findById(categoryId)?.name;
 
-    setState(() => _isSaving = true);
+    setState(() {
+      _isSaving = true;
+      _imageUploadError = null;
+    });
 
     var uploadedImageUrl = _nullableText(_imageUrlController);
     if (_selectedImage != null) {
       try {
+        setState(() => _isUploadingImage = true);
         uploadedImageUrl = await _uploadImage(_selectedImage!);
+        if (!mounted) return;
+        setState(() {
+          _isUploadingImage = false;
+          _imageUploadError = null;
+          if (uploadedImageUrl?.trim().isNotEmpty == true) {
+            _imageUrlController.text = uploadedImageUrl!.trim();
+            _selectedImage = null;
+          }
+        });
       } catch (error) {
         if (!mounted) return;
         SnackBarHelper.showError(context, error.toString());
-        setState(() => _isSaving = false);
+        setState(() {
+          _isSaving = false;
+          _isUploadingImage = false;
+          _imageUploadError = error.toString();
+        });
         return;
       }
     }
@@ -741,6 +779,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                       website: _websiteController.text.trim(),
                       imageUrl: _imageUrlController.text.trim(),
                       selectedImage: _selectedImage,
+                      imageSyncStatus: _imageSyncStatus,
                       rating: _rating,
                       isSaving: _isSaving,
                       onEdit: _scrollToDetailsForm,
@@ -947,6 +986,10 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                         ),
                       ),
                     ),
+                  if (_imageSyncStatus != null) ...[
+                    const SizedBox(height: 10),
+                    _ImageSyncStatusIndicator(status: _imageSyncStatus!),
+                  ],
                   const SizedBox(height: 14),
                   _Input(
                     controller: _noteController,
@@ -996,6 +1039,7 @@ class _PlacePreviewCard extends StatelessWidget {
     required this.website,
     required this.imageUrl,
     required this.selectedImage,
+    required this.imageSyncStatus,
     required this.rating,
     required this.isSaving,
     required this.onEdit,
@@ -1012,6 +1056,7 @@ class _PlacePreviewCard extends StatelessWidget {
   final String website;
   final String imageUrl;
   final File? selectedImage;
+  final ImageSyncStatus? imageSyncStatus;
   final double rating;
   final bool isSaving;
   final VoidCallback onEdit;
@@ -1061,6 +1106,10 @@ class _PlacePreviewCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (imageSyncStatus != null) ...[
+                _ImageSyncStatusIndicator(status: imageSyncStatus!),
+                const SizedBox(height: AppSpacing.md),
+              ],
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1289,6 +1338,84 @@ class _PreviewChip extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _ImageSyncStatusIndicator extends StatelessWidget {
+  const _ImageSyncStatusIndicator({required this.status});
+
+  final ImageSyncStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = _colors(context);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: colors.$1,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: colors.$2),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(status.icon, size: 16, color: colors.$3),
+          const SizedBox(width: AppSpacing.xs),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 260),
+            child: Text(
+              status.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.caption.copyWith(
+                color: colors.$3,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  (Color, Color, Color) _colors(BuildContext context) {
+    final theme = Theme.of(context);
+    switch (status.tone) {
+      case ImageSyncTone.success:
+        return (
+          const Color(0xFFE6F7EF),
+          const Color(0xFF9DDCBD),
+          const Color(0xFF137A49),
+        );
+      case ImageSyncTone.warning:
+        return (
+          const Color(0xFFFFF6E6),
+          const Color(0xFFF4C978),
+          const Color(0xFF8A5600),
+        );
+      case ImageSyncTone.error:
+        return (
+          const Color(0xFFFFECEC),
+          const Color(0xFFE6A1A1),
+          const Color(0xFFB42318),
+        );
+      case ImageSyncTone.progress:
+        return (
+          AppColors.primarySoft,
+          AppColors.primary.withValues(alpha: 0.32),
+          AppColors.primaryDark,
+        );
+      case ImageSyncTone.neutral:
+        return (
+          theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.72),
+          theme.dividerColor,
+          AppColors.textSecondary,
+        );
+    }
   }
 }
 

@@ -165,6 +165,72 @@ void main() {
     expect(find.byKey(const Key('addPlacePreviewSaveButton')), findsOneWidget);
   });
 
+  testWidgets('Google Maps image is marked as temporary before saving', (
+    tester,
+  ) async {
+    await _useTallSurface(tester);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(
+            create: (_) => CategoryProvider(_FakeCategoryService()),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => PlaceProvider(_CapturingPlaceService()),
+          ),
+        ],
+        child: const MaterialApp(
+          home: AddPlaceScreen(
+            prefilledDraft: {
+              'name': 'AN cafe - Kinh Bac Signature',
+              'address': '1-2 D. Tran Phu, Tu Son, Bac Ninh',
+              'imageUrl':
+                  'https://lh5.googleusercontent.com/p/map-photo=w408-h306-k-no',
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ảnh Google Maps tạm thời'), findsWidgets);
+  });
+
+  testWidgets('Cloudinary image is marked as stored before saving', (
+    tester,
+  ) async {
+    await _useTallSurface(tester);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(
+            create: (_) => CategoryProvider(_FakeCategoryService()),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => PlaceProvider(_CapturingPlaceService()),
+          ),
+        ],
+        child: const MaterialApp(
+          home: AddPlaceScreen(
+            prefilledDraft: {
+              'name': 'AN cafe - Kinh Bac Signature',
+              'address': '1-2 D. Tran Phu, Tu Son, Bac Ninh',
+              'imageUrl':
+                  'https://res.cloudinary.com/demo/image/upload/roamy/photo.jpg',
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Đã lưu Cloudinary'), findsWidgets);
+  });
+
   testWidgets('preview edit action scrolls to the editable form', (
     tester,
   ) async {
