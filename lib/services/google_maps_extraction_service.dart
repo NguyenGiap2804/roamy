@@ -1181,6 +1181,26 @@ class GoogleMapsExtractionService {
     return _asDouble(value[key]);
   }
 
+  bool _isExternalWebsiteUrl(String? value) {
+    if (value == null) return false;
+    final uri = Uri.tryParse(value);
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+      return false;
+    }
+
+    final host = uri.host.toLowerCase();
+    if (host.isEmpty) return false;
+    if (host.contains('google.') ||
+        host == 'maps.app.goo.gl' ||
+        host == 'goo.gl' ||
+        host.contains('gstatic.com') ||
+        host.contains('googleusercontent.com')) {
+      return false;
+    }
+
+    return true;
+  }
+
   double? _asDouble(dynamic value) {
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value.trim());
@@ -1197,26 +1217,6 @@ bool _isHttpImageUrl(String? value) {
   if (value == null) return false;
   final uri = Uri.tryParse(value);
   return uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
-}
-
-bool _isExternalWebsiteUrl(String? value) {
-  if (value == null) return false;
-  final uri = Uri.tryParse(value);
-  if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
-    return false;
-  }
-
-  final host = uri.host.toLowerCase();
-  if (host.isEmpty) return false;
-  if (host.contains('google.') ||
-      host == 'maps.app.goo.gl' ||
-      host == 'goo.gl' ||
-      host.contains('gstatic.com') ||
-      host.contains('googleusercontent.com')) {
-    return false;
-  }
-
-  return true;
 }
 
 bool _isRedirect(int statusCode) {
