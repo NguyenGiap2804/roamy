@@ -21,10 +21,16 @@ import '../../widgets/primary_button.dart';
 import '../../widgets/rating_stars.dart';
 
 class AddPlaceScreen extends StatefulWidget {
-  const AddPlaceScreen({super.key, this.place, this.prefilledDraft});
+  const AddPlaceScreen({
+    super.key,
+    this.place,
+    this.prefilledDraft,
+    this.mapsExtractionService,
+  });
 
   final Place? place;
   final Map<String, dynamic>? prefilledDraft;
+  final GoogleMapsExtractionService? mapsExtractionService;
 
   @override
   State<AddPlaceScreen> createState() => _AddPlaceScreenState();
@@ -53,8 +59,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
   final _detailsSectionKey = GlobalKey();
 
   final ImagePicker _picker = ImagePicker();
-  final GoogleMapsExtractionService _mapsExtractionService =
-      GoogleMapsExtractionService();
+  late final GoogleMapsExtractionService _mapsExtractionService;
   File? _selectedImage;
   String? _selectedCategoryId;
   double _rating = 4.5;
@@ -82,6 +87,8 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
   @override
   void initState() {
     super.initState();
+    _mapsExtractionService =
+        widget.mapsExtractionService ?? GoogleMapsExtractionService();
     _fillFromPlace(widget.place);
     _applyPrefilledDraft(widget.prefilledDraft);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -265,9 +272,9 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     );
   }
 
-  Future<void> _autoFillFromMapsUrl() async {
+  Future<bool> _autoFillFromMapsUrl({bool showFeedback = true}) async {
     var url = _mapsUrlController.text.trim();
-    if (url.isEmpty) return;
+    if (url.isEmpty || _isAutoFilling) return false;
     if (RegExp(r'(^|//)ps\.app\.goo\.gl').hasMatch(url)) {
       url = url.replaceFirst('ps.app.goo.gl', 'maps.app.goo.gl');
       _mapsUrlController.text = url;
@@ -279,7 +286,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     try {
       final placeData = await _mapsExtractionService.extract(url);
 
-      if (!mounted) return;
+      if (!mounted) return false;
 
       if (placeData.hasAnyData) {
         setState(() {
@@ -288,26 +295,34 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
           _extractionReview = review;
           _showExtractionReview = review.needsManualReview;
         });
-        SnackBarHelper.showSuccess(
-          context,
-          'Đã tự động điền thông tin từ Google Maps',
-        );
+        if (showFeedback) {
+          SnackBarHelper.showSuccess(
+            context,
+            'Đã tự động điền thông tin từ Google Maps',
+          );
+        }
+        return true;
       } else {
         setState(() {
           _extractionReview = null;
           _showExtractionReview = false;
         });
-        SnackBarHelper.showError(
-          context,
-          'Không tìm thấy thông tin trong link này',
-        );
+        if (showFeedback) {
+          SnackBarHelper.showError(
+            context,
+            'Không tìm thấy thông tin trong link này',
+          );
+        }
       }
     } catch (_) {
-      if (!mounted) return;
-      SnackBarHelper.showError(context, 'Lỗi trích xuất link Google Maps');
+      if (!mounted) return false;
+      if (showFeedback) {
+        SnackBarHelper.showError(context, 'Lỗi trích xuất link Google Maps');
+      }
     } finally {
       if (mounted) setState(() => _isAutoFilling = false);
     }
+    return false;
   }
 
   void _applyExtractedPlaceData(GoogleMapsPlaceData data) {
@@ -428,6 +443,8 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
   }
 
   Future<void> _save() async {
+    await _autoFillMissingCoreFieldsBeforeSave();
+    if (!mounted) return;
     if (!_formKey.currentState!.validate()) return;
 
     final categoryId = _selectedCategoryId;
@@ -552,6 +569,18 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  Future<void> _autoFillMissingCoreFieldsBeforeSave() async {
+    final hasMapsUrl = _mapsUrlController.text.trim().isNotEmpty;
+    if (!hasMapsUrl) return;
+
+    final missingCoreFields =
+        _nameController.text.trim().isEmpty ||
+        _addressController.text.trim().isEmpty;
+    if (!missingCoreFields) return;
+
+    await _autoFillFromMapsUrl(showFeedback: false);
   }
 
   String? _nullableText(TextEditingController controller) {

@@ -8,6 +8,7 @@ import 'package:roamy/providers/category_provider.dart';
 import 'package:roamy/providers/place_provider.dart';
 import 'package:roamy/screens/add_place/add_place_screen.dart';
 import 'package:roamy/services/category_service.dart';
+import 'package:roamy/services/google_maps_extraction_service.dart';
 import 'package:roamy/services/place_service.dart';
 
 void main() {
@@ -261,6 +262,69 @@ void main() {
     expect(placeService.createdData?['rating'], 4.6);
     await tester.pump(const Duration(seconds: 3));
   });
+
+  testWidgets('save auto-fills missing core fields from a Google Maps link', (
+    tester,
+  ) async {
+    await _useTallSurface(tester);
+    final placeService = _CapturingPlaceService();
+    final mapsService = _FakeMapsExtractionService(
+      const GoogleMapsPlaceData(
+        name: 'AN cafe - Kinh Bac Signature',
+        address: '1-2 D. Tran Phu, Tu Son, Bac Ninh',
+        priceRange: '1-100.000 d/nguoi',
+        openingHours: 'Dang mo cua',
+        phone: '+84 869 622 074',
+        imageUrl: 'https://example.com/an-cafe.jpg',
+        rating: 4.4,
+        latitude: 21.115297,
+        longitude: 105.958210,
+      ),
+    );
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(
+            create: (_) => CategoryProvider(_FakeCategoryService()),
+          ),
+          ChangeNotifierProvider(create: (_) => PlaceProvider(placeService)),
+        ],
+        child: MaterialApp(
+          home: AddPlaceScreen(mapsExtractionService: mapsService),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextFormField).first,
+      'https://maps.app.goo.gl/test-place',
+    );
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('addPlaceFormSaveButton')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('addPlaceFormSaveButton')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(mapsService.calls, 1);
+    expect(placeService.createdData?['name'], 'AN cafe - Kinh Bac Signature');
+    expect(
+      placeService.createdData?['address'],
+      '1-2 D. Tran Phu, Tu Son, Bac Ninh',
+    );
+    expect(
+      placeService.createdData?['imageUrl'],
+      'https://example.com/an-cafe.jpg',
+    );
+    expect(placeService.createdData?['rating'], 4.4);
+    expect(placeService.createdData?['latitude'], 21.115297);
+    expect(placeService.createdData?['longitude'], 105.958210);
+    await tester.pump(const Duration(seconds: 3));
+  });
 }
 
 Future<void> _useTallSurface(WidgetTester tester) async {
@@ -298,6 +362,19 @@ class _FakePlaceService extends PlaceService {
   @override
   Future<Place> getPlaceById(String id) async {
     return duplicatePlace;
+  }
+}
+
+class _FakeMapsExtractionService extends GoogleMapsExtractionService {
+  _FakeMapsExtractionService(this.data);
+
+  final GoogleMapsPlaceData data;
+  int calls = 0;
+
+  @override
+  Future<GoogleMapsPlaceData> extract(String rawUrl) async {
+    calls += 1;
+    return data;
   }
 }
 
