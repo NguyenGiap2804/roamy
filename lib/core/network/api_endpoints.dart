@@ -5,7 +5,7 @@ class ApiEndpoints {
     const envUrl = String.fromEnvironment('API_BASE_URL');
     if (envUrl.isNotEmpty) return envUrl;
 
-    return 'https://roamy-production.up.railway.app/api/v1';
+    return 'https://roamy-backend-wyfp.onrender.com/api/v1';
   }
 
   static const categories = '/categories';
