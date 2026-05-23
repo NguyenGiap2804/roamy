@@ -34,6 +34,7 @@ class GoogleMapsPlaceData {
     this.priceRange,
     this.openingHours,
     this.phone,
+    this.imageUrl,
     this.rating,
     this.latitude,
     this.longitude,
@@ -44,6 +45,7 @@ class GoogleMapsPlaceData {
   final String? priceRange;
   final String? openingHours;
   final String? phone;
+  final String? imageUrl;
   final double? rating;
   final double? latitude;
   final double? longitude;
@@ -54,6 +56,7 @@ class GoogleMapsPlaceData {
     final hasPriceRange = _clean(priceRange) != null;
     final hasOpeningHours = _clean(openingHours) != null;
     final hasPhone = _clean(phone) != null;
+    final hasImage = _clean(imageUrl) != null;
     final hasRating = rating != null && rating! >= 1 && rating! <= 5;
     final hasCoordinates = hasUsableCoordinates(latitude, longitude);
 
@@ -63,8 +66,10 @@ class GoogleMapsPlaceData {
     if (hasCoordinates) score += 0.24;
     if (hasOpeningHours) score += 0.08;
     if (hasPhone) score += 0.06;
+    if (hasImage) score += 0.04;
     if (hasPriceRange) score += 0.04;
     if (hasRating) score += 0.02;
+    score = score.clamp(0.0, 1.0).toDouble();
 
     final capturedFields = <String>[];
     if (hasName) capturedFields.add('Ten');
@@ -72,6 +77,7 @@ class GoogleMapsPlaceData {
     if (hasCoordinates) capturedFields.add('Toa do');
     if (hasOpeningHours) capturedFields.add('Gio mo cua');
     if (hasPhone) capturedFields.add('So dien thoai');
+    if (hasImage) capturedFields.add('Hinh anh');
     if (hasPriceRange) capturedFields.add('Khoang gia');
     if (hasRating) capturedFields.add('Danh gia');
 
@@ -118,6 +124,7 @@ class GoogleMapsPlaceData {
         priceRange != null ||
         openingHours != null ||
         phone != null ||
+        imageUrl != null ||
         rating != null ||
         latitude != null ||
         longitude != null;
@@ -130,6 +137,7 @@ class GoogleMapsPlaceData {
       priceRange: _prefer(priceRange, other.priceRange),
       openingHours: _prefer(openingHours, other.openingHours),
       phone: _prefer(phone, other.phone),
+      imageUrl: _prefer(imageUrl, other.imageUrl),
       rating: rating ?? other.rating,
       latitude: latitude ?? other.latitude,
       longitude: longitude ?? other.longitude,
@@ -247,7 +255,14 @@ class GoogleMapsExtractionService {
 
   GoogleMapsPlaceData _extractFromHtml(String body, Uri baseUri) {
     final decodedBody = _decodeGoogleEscapes(_decodeHtmlEntities(body));
-    var data = _extractStructuredData(decodedBody);
+    var data = _extractStructuredData(
+      decodedBody,
+    ).merge(_extractFromUri(baseUri));
+
+    final metadataImageUrl = _findHtmlMetadataImage(decodedBody);
+    if (metadataImageUrl != null) {
+      data = data.merge(GoogleMapsPlaceData(imageUrl: metadataImageUrl));
+    }
 
     final previewUri = _findPreviewUri(body, baseUri);
     if (previewUri != null) {
@@ -302,39 +317,78 @@ class GoogleMapsExtractionService {
       );
     }
 
-    for (final key in const ['q', 'query', 'destination', 'daddr']) {
+    for (final key in const [
+      'q',
+      'query',
+      'destination',
+      'daddr',
+      'location',
+    ]) {
       final value = uri.queryParameters[key];
       if (value == null || value.trim().isEmpty) continue;
 
-      final coordinateMatch = RegExp(
-        r'(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)',
-      ).firstMatch(value);
-      if (coordinateMatch != null) {
-        data = data.merge(
-          GoogleMapsPlaceData(
-            latitude: double.tryParse(coordinateMatch.group(1)!),
-            longitude: double.tryParse(coordinateMatch.group(2)!),
-          ),
-        );
-      } else if (!value.contains(',')) {
-        data = data.merge(GoogleMapsPlaceData(name: _clean(value)));
-      }
+      data = data.merge(_extractFromQueryValue(value));
     }
 
     final decodedUrl = Uri.decodeFull(uri.toString());
-    final pbCoords = RegExp(
-      r'!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)',
-    ).firstMatch(decodedUrl);
-    if (pbCoords != null) {
-      data = data.merge(
-        GoogleMapsPlaceData(
-          latitude: double.tryParse(pbCoords.group(1)!),
-          longitude: double.tryParse(pbCoords.group(2)!),
-        ),
-      );
+    final placeCoordinates = _extractPlaceCoordinatesFromUrl(decodedUrl);
+    if (placeCoordinates != null) {
+      data = placeCoordinates.merge(data);
     }
 
     return data;
+  }
+
+  GoogleMapsPlaceData _extractFromQueryValue(String value) {
+    final cleaned = _clean(value);
+    if (cleaned == null) return const GoogleMapsPlaceData();
+
+    final coordinateOnlyMatch = RegExp(
+      r'^\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)\s*$',
+    ).firstMatch(cleaned);
+    if (coordinateOnlyMatch != null) {
+      return GoogleMapsPlaceData(
+        latitude: double.tryParse(coordinateOnlyMatch.group(1)!),
+        longitude: double.tryParse(coordinateOnlyMatch.group(2)!),
+      );
+    }
+
+    if (cleaned.startsWith('http://') || cleaned.startsWith('https://')) {
+      return const GoogleMapsPlaceData();
+    }
+
+    final parts = cleaned
+        .split(',')
+        .map(_clean)
+        .whereType<String>()
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return const GoogleMapsPlaceData();
+
+    return GoogleMapsPlaceData(
+      name: _sanitizePlaceName(parts.first),
+      address: parts.length > 1 ? parts.sublist(1).join(', ') : null,
+    );
+  }
+
+  GoogleMapsPlaceData? _extractPlaceCoordinatesFromUrl(String decodedUrl) {
+    for (final pattern in [
+      RegExp(r'!(?:8m2|4m2)!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)'),
+      RegExp(r'!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)'),
+    ]) {
+      RegExpMatch? selected;
+      for (final match in pattern.allMatches(decodedUrl)) {
+        selected = match;
+      }
+      if (selected == null) continue;
+
+      return GoogleMapsPlaceData(
+        latitude: double.tryParse(selected.group(1)!),
+        longitude: double.tryParse(selected.group(2)!),
+      );
+    }
+
+    return null;
   }
 
   Uri? _findPreviewUri(String body, Uri baseUri) {
@@ -363,6 +417,39 @@ class GoogleMapsExtractionService {
       return Uri.parse('https://www.google.com$href');
     }
     return baseUri.resolve(href);
+  }
+
+  String? _findHtmlMetadataImage(String body) {
+    final metaTags = RegExp(
+      r'''<meta\b[^>]*>''',
+      caseSensitive: false,
+    ).allMatches(body);
+
+    for (final match in metaTags) {
+      final tag = match.group(0)!;
+      final key =
+          _htmlAttribute(tag, 'property') ?? _htmlAttribute(tag, 'name');
+      if (key == null) continue;
+      final normalizedKey = key.toLowerCase();
+      if (normalizedKey != 'og:image' &&
+          normalizedKey != 'og:image:url' &&
+          normalizedKey != 'twitter:image') {
+        continue;
+      }
+
+      final content = _clean(_htmlAttribute(tag, 'content'));
+      if (_isHttpImageUrl(content)) return content;
+    }
+
+    return null;
+  }
+
+  String? _htmlAttribute(String tag, String attribute) {
+    final match = RegExp(
+      "$attribute\\s*=\\s*[\"']([^\"']+)[\"']",
+      caseSensitive: false,
+    ).firstMatch(tag);
+    return match == null ? null : _decodeHtmlEntities(match.group(1)!);
   }
 
   (double?, double?) _extractCoordinates(String text) {
@@ -829,6 +916,7 @@ class GoogleMapsExtractionService {
             _normalizePriceRange(rawPriceRange) ?? _clean(rawPriceRange),
         openingHours: _structuredOpeningHours(placeNode),
         phone: _clean(placeNode['telephone']?.toString()),
+        imageUrl: _structuredImageUrl(placeNode['image']),
         rating: _structuredRating(placeNode['aggregateRating']),
         latitude:
             _structuredCoordinate(placeNode['geo'], 'latitude') ??
@@ -840,6 +928,28 @@ class GoogleMapsExtractionService {
     } catch (_) {
       return const GoogleMapsPlaceData();
     }
+  }
+
+  String? _structuredImageUrl(dynamic value) {
+    if (value is String) {
+      final cleaned = _clean(value);
+      return _isHttpImageUrl(cleaned) ? cleaned : null;
+    }
+
+    if (value is List) {
+      for (final item in value) {
+        final imageUrl = _structuredImageUrl(item);
+        if (imageUrl != null) return imageUrl;
+      }
+      return null;
+    }
+
+    if (value is Map<String, dynamic>) {
+      return _structuredImageUrl(value['url']) ??
+          _structuredImageUrl(value['contentUrl']);
+    }
+
+    return null;
   }
 
   Map<String, dynamic>? _findStructuredPlaceNode(dynamic value) {
@@ -1035,6 +1145,12 @@ class GoogleMapsExtractionService {
 String? _prefer(String? current, String? next) {
   if (current != null && current.trim().isNotEmpty) return current;
   return _clean(next);
+}
+
+bool _isHttpImageUrl(String? value) {
+  if (value == null) return false;
+  final uri = Uri.tryParse(value);
+  return uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
 }
 
 bool _isRedirect(int statusCode) {

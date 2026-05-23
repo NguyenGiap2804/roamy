@@ -1,3 +1,6 @@
+import '../core/utils/coordinates.dart';
+import '../core/utils/google_maps_urls.dart';
+
 /// A place discovered from external APIs (OpenStreetMap) in real-time.
 ///
 /// This is intentionally separate from [Place] because the data shape and
@@ -16,6 +19,8 @@ class NearbyPlace {
     required this.categoryBase,
     this.openingHours,
     this.phone,
+    this.website,
+    this.cuisine,
     required this.mapsUrl,
   });
 
@@ -50,7 +55,13 @@ class NearbyPlace {
   /// Phone number (from OSM tags).
   final String? phone;
 
-  /// Google Maps URL for navigation (constructed from coordinates).
+  /// Website URL (from OSM tags).
+  final String? website;
+
+  /// Cuisine type (from OSM tags).
+  final String? cuisine;
+
+  /// Google Maps URL for navigation/search.
   final String mapsUrl;
 
   /// Safe image URL that returns empty string if null.
@@ -58,6 +69,37 @@ class NearbyPlace {
 
   /// Whether this place has a known rating.
   bool get hasRating => rating > 0;
+
+  Map<String, dynamic> toAddPlaceDraft({
+    String? name,
+    String? resolvedAddress,
+    String? address,
+    double? rating,
+    String? priceRange,
+    String? openingHours,
+    String? phone,
+    String? imageUrl,
+  }) {
+    final draft = <String, dynamic>{
+      'name': _firstNonBlank(name, this.name) ?? '',
+      'address': _firstNonBlank(address, resolvedAddress, this.address) ?? '',
+      'rating': rating ?? this.rating,
+      'latitude': latitude,
+      'longitude': longitude,
+      'mapsUrl': mapsUrl,
+    };
+
+    final selectedPriceRange = _firstNonBlank(priceRange);
+    if (selectedPriceRange != null) draft['priceRange'] = selectedPriceRange;
+    final selectedImageUrl = _firstNonBlank(imageUrl, photoUrl);
+    if (selectedImageUrl != null) draft['imageUrl'] = selectedImageUrl;
+    final hours = _firstNonBlank(openingHours, this.openingHours);
+    if (hours != null) draft['openingHours'] = hours;
+    final phoneNumber = _firstNonBlank(phone, this.phone);
+    if (phoneNumber != null) draft['phone'] = phoneNumber;
+
+    return draft;
+  }
 
   /// Create a copy with updated fields (used for photo enrichment).
   NearbyPlace copyWith({String? photoUrl}) {
@@ -73,6 +115,8 @@ class NearbyPlace {
       categoryBase: categoryBase,
       openingHours: openingHours,
       phone: phone,
+      website: website,
+      cuisine: cuisine,
       mapsUrl: mapsUrl,
     );
   }
@@ -80,21 +124,32 @@ class NearbyPlace {
   /// Create from Overpass API response element.
   factory NearbyPlace.fromOverpassJson(Map<String, dynamic> element) {
     final tags = element['tags'] as Map<String, dynamic>? ?? {};
-    final lat = (element['lat'] as num).toDouble();
-    final lng = (element['lon'] as num).toDouble();
+
+    final coordinates = _readOverpassCoordinates(element);
+    if (coordinates == null) {
+      throw const FormatException('Nearby place is missing coordinates');
+    }
+    final lat = coordinates.$1;
+    final lng = coordinates.$2;
+
     final id = element['id'].toString();
 
-    final name = (tags['name'] as String?) ??
+    final name =
+        (tags['official_name'] as String?) ??
+        (tags['name'] as String?) ??
         (tags['name:vi'] as String?) ??
+        (tags['alt_name'] as String?) ??
         (tags['name:en'] as String?) ??
         '';
 
     final catInfo = _mapOsmType(tags);
 
+    final address = _buildAddress(tags);
+
     return NearbyPlace(
       placeId: id,
       name: name,
-      address: _buildAddress(tags),
+      address: address,
       rating: _computeQualityRating(tags),
       latitude: lat,
       longitude: lng,
@@ -102,23 +157,34 @@ class NearbyPlace {
       category: catInfo.$1,
       categoryBase: catInfo.$2,
       openingHours: tags['opening_hours'] as String?,
-      phone: tags['phone'] as String?,
-      mapsUrl: 'https://www.google.com/maps/search/?api=1'
-          '&query=${Uri.encodeComponent(name)}',
+      phone: (tags['phone'] ?? tags['contact:phone']) as String?,
+      website: (tags['website'] ?? tags['contact:website']) as String?,
+      cuisine: tags['cuisine'] as String?,
+      mapsUrl: buildGoogleMapsSearchUrl(
+        name: name,
+        address: address,
+        latitude: lat,
+        longitude: lng,
+      ),
     );
   }
 
   /// Create from Nominatim search response.
   factory NearbyPlace.fromNominatimJson(Map<String, dynamic> json) {
-    final lat = double.tryParse(json['lat']?.toString() ?? '') ?? 0.0;
-    final lng = double.tryParse(json['lon']?.toString() ?? '') ?? 0.0;
+    final lat = double.tryParse(json['lat']?.toString() ?? '');
+    final lng = double.tryParse(json['lon']?.toString() ?? '');
+    if (!hasUsableCoordinates(lat, lng)) {
+      throw const FormatException('Nearby place is missing coordinates');
+    }
+
     final id = json['place_id']?.toString() ?? '';
 
     final displayName = json['display_name'] as String? ?? '';
     final parts = displayName.split(', ');
     final name = parts.isNotEmpty ? parts[0] : displayName;
-    final address =
-        parts.length > 2 ? parts.sublist(1, 3).join(', ') : displayName;
+    final address = parts.length > 2
+        ? parts.sublist(1, 3).join(', ')
+        : displayName;
 
     final type = json['type'] as String? ?? '';
     final jsonCategory = json['category'] as String? ?? '';
@@ -129,20 +195,61 @@ class NearbyPlace {
       name: name,
       address: address,
       rating: _computeNominatimRating(json),
-      latitude: lat,
-      longitude: lng,
+      latitude: lat!,
+      longitude: lng!,
       photoUrl: _staticMapUrl(lat, lng),
       category: catInfo.$1,
       categoryBase: catInfo.$2,
-      mapsUrl: 'https://www.google.com/maps/search/?api=1'
-          '&query=${Uri.encodeComponent(name)}',
+      mapsUrl: buildGoogleMapsSearchUrl(
+        name: name,
+        address: address,
+        latitude: lat,
+        longitude: lng,
+      ),
     );
   }
 }
 
+String? _firstNonBlank(
+  String? primary, [
+  String? fallback,
+  String? secondFallback,
+]) {
+  for (final value in [primary, fallback, secondFallback]) {
+    if (value == null) continue;
+    final trimmed = value.trim();
+    if (trimmed.isNotEmpty) return trimmed;
+  }
+  return null;
+}
+
+(double, double)? _readOverpassCoordinates(Map<String, dynamic> element) {
+  double? lat;
+  double? lng;
+
+  final rawLat = element['lat'];
+  final rawLng = element['lon'];
+  if (rawLat is num && rawLng is num) {
+    lat = rawLat.toDouble();
+    lng = rawLng.toDouble();
+  } else {
+    final center = element['center'];
+    if (center is Map<String, dynamic>) {
+      final centerLat = center['lat'];
+      final centerLng = center['lon'];
+      if (centerLat is num && centerLng is num) {
+        lat = centerLat.toDouble();
+        lng = centerLng.toDouble();
+      }
+    }
+  }
+
+  if (!hasUsableCoordinates(lat, lng)) return null;
+  return (lat!, lng!);
+}
+
 /// Try to get a photo URL from OSM tags, fallback to a static map.
-String _extractOsmPhotoUrl(
-    Map<String, dynamic> tags, double lat, double lng) {
+String _extractOsmPhotoUrl(Map<String, dynamic> tags, double lat, double lng) {
   // 1. Direct image URL from OSM.
   final image = tags['image'] as String?;
   if (image != null && image.startsWith('http')) return image;
@@ -172,16 +279,20 @@ String _staticMapUrl(double lat, double lng) {
 /// Build a short address from OSM tags.
 String _buildAddress(Map<String, dynamic> tags) {
   final parts = <String>[
+    if (tags['addr:housenumber'] != null) tags['addr:housenumber'] as String,
     if (tags['addr:street'] != null) tags['addr:street'] as String,
+    if (tags['addr:hamlet'] != null) tags['addr:hamlet'] as String,
+    if (tags['addr:subdistrict'] != null) tags['addr:subdistrict'] as String,
     if (tags['addr:district'] != null) tags['addr:district'] as String,
     if (tags['addr:city'] != null) tags['addr:city'] as String,
   ];
   if (parts.isNotEmpty) return parts.join(', ');
 
-  // Fallback: use description or cuisine
-  final cuisine = tags['cuisine'] as String?;
-  if (cuisine != null) return 'Ẩm thực: $cuisine';
-  return '';
+  // Fallback: try any known administrative tags in order
+  final street = tags['addr:full'] as String?;
+  if (street != null && street.trim().isNotEmpty) return street.trim();
+
+  return ''; // Empty — will be filled via reverse geocode in the UI layer
 }
 
 /// Map OSM tags to (categoryWithEmoji, categoryBase) pair.
@@ -194,7 +305,9 @@ String _buildAddress(Map<String, dynamic> tags) {
   if (amenity != null) {
     return switch (amenity) {
       'cafe' || 'coffee_shop' => ('Cafe ☕', 'Cafe'),
-      'restaurant' || 'food_court' || 'fast_food' => ('Nhà hàng 🍜', 'Nhà hàng'),
+      'restaurant' ||
+      'food_court' ||
+      'fast_food' => ('Nhà hàng 🍜', 'Nhà hàng'),
       'bar' || 'pub' || 'nightclub' => ('Bar 🍸', 'Bar'),
       'cinema' => ('Rạp phim 🎬', 'Rạp phim'),
       'pharmacy' => ('Nhà thuốc 💊', 'Nhà thuốc'),
@@ -208,7 +321,10 @@ String _buildAddress(Map<String, dynamic> tags) {
   }
   if (tourism != null) {
     return switch (tourism) {
-      'hotel' || 'motel' || 'guest_house' || 'hostel' => ('Khách sạn 🏨', 'Khách sạn'),
+      'hotel' ||
+      'motel' ||
+      'guest_house' ||
+      'hostel' => ('Khách sạn 🏨', 'Khách sạn'),
       'attraction' || 'museum' || 'viewpoint' => ('Tham quan 🗺️', 'Tham quan'),
       _ => ('Du lịch 🧳', 'Du lịch'),
     };
@@ -216,7 +332,9 @@ String _buildAddress(Map<String, dynamic> tags) {
   if (leisure != null) {
     return switch (leisure) {
       'park' || 'garden' => ('Công viên 🌳', 'Công viên'),
-      'sports_centre' || 'stadium' || 'fitness_centre' => ('Thể thao ⚽', 'Thể thao'),
+      'sports_centre' ||
+      'stadium' ||
+      'fitness_centre' => ('Thể thao ⚽', 'Thể thao'),
       'playground' => ('Khu vui chơi 🎠', 'Khu vui chơi'),
       _ => ('Giải trí 🎭', 'Giải trí'),
     };

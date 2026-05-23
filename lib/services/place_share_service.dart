@@ -23,7 +23,13 @@ class SharePlusPlaceShareGateway implements PlaceShareGateway {
     required String text,
     required String subject,
   }) {
-    return Share.shareXFiles([file], text: text, subject: subject);
+    return SharePlus.instance.share(
+      ShareParams(
+        files: [file],
+        text: text,
+        subject: subject,
+      ),
+    );
   }
 }
 

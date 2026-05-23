@@ -125,6 +125,7 @@ void main() {
           "addressCountry": "Viet Nam"
         },
         "priceRange": "100.000-200.000 VND/person",
+        "image": "https://lh5.googleusercontent.com/p/example=w408-h306-k-no",
         "openingHours": ["Mon-Sun 08:00-22:00"],
         "telephone": "+84 123 456 789",
         "aggregateRating": {
@@ -153,9 +154,53 @@ void main() {
     expect(data.priceRange, '100.000-200.000 VND/person');
     expect(data.openingHours, 'Mon-Sun 08:00-22:00');
     expect(data.phone, '+84 123 456 789');
+    expect(
+      data.imageUrl,
+      'https://lh5.googleusercontent.com/p/example=w408-h306-k-no',
+    );
     expect(data.rating, 4.6);
     expect(data.latitude, 21.0123);
     expect(data.longitude, 105.85);
+  });
+
+  test('extracts preview image from HTML metadata', () {
+    const html = '''
+<html>
+  <head>
+    <meta property="og:title" content="AN cafe - Kinh Bac Signature">
+    <meta property="og:image" content="https://lh5.googleusercontent.com/p/map-photo=w408-h306-k-no">
+  </head>
+</html>
+''';
+
+    final service = GoogleMapsExtractionService();
+    final data = service.extractFromHtmlBody(
+      html,
+      baseUri: Uri.parse('https://www.google.com/maps'),
+    );
+
+    expect(
+      data.imageUrl,
+      'https://lh5.googleusercontent.com/p/map-photo=w408-h306-k-no',
+    );
+  });
+
+  test('extracts name and address from Google Maps search query', () {
+    final service = GoogleMapsExtractionService();
+    final data = service.extractFromHtmlBody(
+      '<html></html>',
+      baseUri: Uri.https('www.google.com', '/maps/search/', {
+        'api': '1',
+        'query':
+            'nhẹ cafe - Đền Đô, 42, Phố Cổ Pháp, Phường Đình Bảng, Thành phố Từ Sơn, Bắc Ninh',
+      }),
+    );
+
+    expect(data.name, 'nhẹ cafe - Đền Đô');
+    expect(
+      data.address,
+      '42, Phố Cổ Pháp, Phường Đình Bảng, Thành phố Từ Sơn, Bắc Ninh',
+    );
   });
 
   test('falls back to ES5 deep link when preview link is missing', () {
@@ -178,6 +223,28 @@ void main() {
     expect(data.name, 'The Cofftea');
     expect(data.latitude, 21.0151283);
     expect(data.longitude, 105.5181395);
+  });
+
+  test('uses exact place coordinates when deep link camera is different', () {
+    const html = '''
+<html>
+  <head>
+    <script>
+      window.ES5DGURL='/maps/place/Th%E1%BB%81m+Cafe/@21.0273326,105.6007394,11.75z/data=!4m6!3m5!1s0x31345b00620dc483:0xf1f8c27e91f2452c!8m2!3d21.0227921!4d105.550495!16s%2Fg%2F11xk_231d0';
+    </script>
+  </head>
+</html>
+''';
+
+    final service = GoogleMapsExtractionService();
+    final data = service.extractFromHtmlBody(
+      html,
+      baseUri: Uri.parse('https://www.google.com/maps'),
+    );
+
+    expect(data.name, 'Thềm Cafe');
+    expect(data.latitude, 21.0227921);
+    expect(data.longitude, 105.550495);
   });
 
   test('marks complete extracted place data as high confidence', () {

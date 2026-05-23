@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
@@ -32,39 +33,63 @@ class ExploreProvider extends ChangeNotifier {
   bool _initialLoadDone = false;
   String _currentAddress = '';
   Timer? _debounce;
+  DateTime? _lastLocationRefreshAt;
 
   // ── Getters ──
 
-  // Helper to sort places by category priority and data completeness
+  // Helper to sort places by distance, category priority and data completeness
   List<NearbyPlace> _sortPlacesByPriority(List<NearbyPlace> places) {
-    int getPriority(String cat) {
-      if (cat == 'Cafe') return 3;
+    if (_latitude == null || _longitude == null) return places;
+
+    double calculateDistance(double lat2, double lon2) {
+      const p = 0.017453292519943295;
+      final a =
+          0.5 -
+          cos((lat2 - _latitude!) * p) / 2 +
+          cos(_latitude! * p) *
+              cos(lat2 * p) *
+              (1 - cos((lon2 - _longitude!) * p)) /
+              2;
+      return 12742 * asin(sqrt(a)); // Distance in km
+    }
+
+    int getCategoryPriority(String cat) {
+      if (cat == 'Cafe') return 10;
       if (cat == 'Nhà hàng') return 2;
       if (cat == 'Khách sạn') return 1;
-      return 0; // Other categories
+      return 0;
     }
 
     final sorted = List.of(places);
     sorted.sort((a, b) {
-      final pA = getPriority(a.categoryBase);
-      final pB = getPriority(b.categoryBase);
-      
-      if (pA != pB) {
-        return pB.compareTo(pA); // Highest priority first
-      }
-      
-      // If same category priority, sort by popularity score
-      return b.rating.compareTo(a.rating);
+      final distA = calculateDistance(a.latitude, a.longitude);
+      final distB = calculateDistance(b.latitude, b.longitude);
+
+      final pA = getCategoryPriority(a.categoryBase);
+      final pB = getCategoryPriority(b.categoryBase);
+
+      // If one is very close (< 500m) and the other is far (> 2km),
+      // proximity wins regardless of category.
+      if (distA < 0.5 && distB > 2.0) return -1;
+      if (distB < 0.5 && distA > 2.0) return 1;
+
+      // Otherwise, prioritize by category
+      if (pA != pB) return pB.compareTo(pA);
+
+      // Same priority, sort by distance
+      return distA.compareTo(distB);
     });
     return sorted;
   }
 
   /// Nearby places filtered by selected category and sorted by priority.
   List<NearbyPlace> get nearbyPlaces {
-    final list = _selectedCategory == 'Tất cả' 
-        ? _allNearbyPlaces 
-        : _allNearbyPlaces.where((p) => p.categoryBase == _selectedCategory).toList();
-    
+    final list = _selectedCategory == 'Tất cả'
+        ? _allNearbyPlaces
+        : _allNearbyPlaces
+              .where((p) => p.categoryBase == _selectedCategory)
+              .toList();
+
     return _sortPlacesByPriority(list);
   }
 
@@ -77,10 +102,7 @@ class ExploreProvider extends ChangeNotifier {
 
   /// Available categories derived from loaded data.
   List<String> get availableCategories {
-    final cats = _allNearbyPlaces
-        .map((p) => p.categoryBase)
-        .toSet()
-        .toList()
+    final cats = _allNearbyPlaces.map((p) => p.categoryBase).toSet().toList()
       ..sort();
     return ['Tất cả', ...cats];
   }
@@ -94,7 +116,8 @@ class ExploreProvider extends ChangeNotifier {
   bool get isSearching => _isSearching;
   String? get errorMessage => _errorMessage;
   bool get initialLoadDone => _initialLoadDone;
-  String get cityName => _currentAddress.isNotEmpty ? _currentAddress : _locationService.cityName;
+  String get cityName =>
+      _currentAddress.isNotEmpty ? _currentAddress : _locationService.cityName;
   bool get isUsingFallbackLocation => _locationService.isFallback;
   bool get hasSearchQuery => _searchQuery.trim().isNotEmpty;
 
@@ -110,6 +133,7 @@ class ExploreProvider extends ChangeNotifier {
       final loc = await _locationService.getCurrentLocation();
       _latitude = loc.latitude;
       _longitude = loc.longitude;
+      _lastLocationRefreshAt = DateTime.now();
 
       final places = await _apiService.searchNearby(
         latitude: loc.latitude,
@@ -178,6 +202,54 @@ class ExploreProvider extends ChangeNotifier {
     _selectedCategory = 'Tất cả';
     _isSearching = false;
     await fetchNearby();
+  }
+
+  Future<void> refreshLocationIfStale({
+    Duration maxAge = const Duration(minutes: 2),
+  }) async {
+    if (_isLoading) return;
+
+    final lastRefresh = _lastLocationRefreshAt;
+    if (lastRefresh != null &&
+        DateTime.now().difference(lastRefresh) < maxAge) {
+      return;
+    }
+
+    await refresh();
+  }
+
+  /// Reverse-geocode a coordinate pair to a human-readable address.
+  /// Used by the detail sheet to lazily fill in addresses missing from OSM.
+  Future<String?> reverseGeocodePlace(double lat, double lng) {
+    return _apiService.reverseGeocode(lat, lng);
+  }
+
+  /// Get formatted distance string to a place.
+  String getDistanceString(NearbyPlace place) {
+    if (_latitude == null || _longitude == null) return '';
+
+    double calculateDistance(
+      double lat1,
+      double lon1,
+      double lat2,
+      double lon2,
+    ) {
+      const p = 0.017453292519943295;
+      final a =
+          0.5 -
+          cos((lat2 - lat1) * p) / 2 +
+          cos(lat1 * p) * cos(lat2 * p) * (1 - cos((lon2 - lon1) * p)) / 2;
+      return 12742 * asin(sqrt(a));
+    }
+
+    final km = calculateDistance(
+      _latitude!,
+      _longitude!,
+      place.latitude,
+      place.longitude,
+    );
+    if (km < 1) return '${(km * 1000).toInt()}m';
+    return '${km.toStringAsFixed(1)}km';
   }
 
   // ── Private ──

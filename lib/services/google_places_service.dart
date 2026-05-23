@@ -15,12 +15,13 @@ import '../models/nearby_place.dart';
 ///
 /// All APIs are 100% free, no API key, no billing required.
 class ExploreApiService {
-  ExploreApiService({http.Client? client})
-      : _client = client ?? http.Client();
+  ExploreApiService({http.Client? client}) : _client = client ?? http.Client();
 
   final http.Client _client;
 
   static const _overpassUrl = 'https://overpass-api.de/api/interpreter';
+  static const _overpassMirrorUrl =
+      'https://overpass.kumi.systems/api/interpreter';
   static const _nominatimUrl = 'https://nominatim.openstreetmap.org/search';
   static const _wikimediaUrl = 'https://commons.wikimedia.org/w/api.php';
   static const _cacheDuration = Duration(minutes: 5);
@@ -36,7 +37,8 @@ class ExploreApiService {
     double radius = 5000,
     int maxResults = 50,
   }) async {
-    final cacheKey = '${latitude.toStringAsFixed(3)}_'
+    final cacheKey =
+        '${latitude.toStringAsFixed(3)}_'
         '${longitude.toStringAsFixed(3)}_nearby';
     final cached = _cache[cacheKey];
     if (cached != null &&
@@ -45,62 +47,104 @@ class ExploreApiService {
       return cached.data;
     }
 
+    // Try primary server, then mirror if it fails
     try {
-      final query = '''
-[out:json][timeout:10];
+      return await _fetchFromOverpass(
+        url: _overpassUrl,
+        latitude: latitude,
+        longitude: longitude,
+        radius: radius,
+        maxResults: maxResults,
+        cacheKey: cacheKey,
+      );
+    } catch (e) {
+      debugPrint(
+        'ExploreApiService: Primary Overpass failed, trying mirror... ($e)',
+      );
+      try {
+        return await _fetchFromOverpass(
+          url: _overpassMirrorUrl,
+          latitude: latitude,
+          longitude: longitude,
+          radius: radius,
+          maxResults: maxResults,
+          cacheKey: cacheKey,
+        );
+      } catch (mirrorError) {
+        debugPrint('ExploreApiService: All Overpass servers failed');
+        if (cached != null) return cached.data;
+        rethrow;
+      }
+    }
+  }
+
+  Future<List<NearbyPlace>> _fetchFromOverpass({
+    required String url,
+    required double latitude,
+    required double longitude,
+    required double radius,
+    required int maxResults,
+    required String cacheKey,
+  }) async {
+    final query =
+        '''
+[out:json][timeout:30];
 (
-  node(around:$radius,$latitude,$longitude)["amenity"~"cafe|restaurant|fast_food|bar|pub|cinema|hospital|pharmacy|bank|fuel"];
-  node(around:$radius,$latitude,$longitude)["tourism"~"hotel|motel|guest_house|hostel|attraction|museum"];
-  node(around:$radius,$latitude,$longitude)["leisure"~"park|sports_centre|fitness_centre|playground"];
-  node(around:$radius,$latitude,$longitude)["shop"~"supermarket|convenience|bakery|clothes"];
+  nw(around:$radius,$latitude,$longitude)["amenity"~"cafe|restaurant|fast_food|bar|pub|cinema|hospital|pharmacy|bank|fuel"];
+  nw(around:$radius,$latitude,$longitude)["tourism"~"hotel|motel|guest_house|hostel|attraction|museum"];
+  nw(around:$radius,$latitude,$longitude)["leisure"~"park|sports_centre|fitness_centre|playground"];
+  nw(around:$radius,$latitude,$longitude)["shop"~"supermarket|convenience|bakery|clothes"];
 );
-out body qt $maxResults;
+out center qt $maxResults;
 ''';
 
-      debugPrint('ExploreApiService: POST Overpass API '
-          '(lat=$latitude, lng=$longitude, r=$radius)');
+    final response = await _client
+        .post(
+          Uri.parse(url),
+          headers: {'User-Agent': _userAgent},
+          body: {'data': query},
+        )
+        .timeout(const Duration(seconds: 35));
 
-      final response = await _client
-          .post(
-            Uri.parse(_overpassUrl),
-            headers: {'User-Agent': _userAgent},
-            body: {'data': query},
-          )
-          .timeout(const Duration(seconds: 15));
-
-      if (response.statusCode != 200) {
-        debugPrint('ExploreApiService: Overpass error ${response.statusCode}');
-        throw Exception('Overpass API returned ${response.statusCode}');
-      }
-
-      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-      final elements = decoded['elements'] as List<dynamic>? ?? [];
-
-      var places = elements
-          .cast<Map<String, dynamic>>()
-          .where((e) {
-            final tags = e['tags'] as Map<String, dynamic>? ?? {};
-            final name = tags['name'] ?? tags['name:vi'] ?? tags['name:en'];
-            return name != null && name.toString().trim().isNotEmpty;
-          })
-          .map((e) => NearbyPlace.fromOverpassJson(e))
-          .toList();
-
-      // Enrich places with photos from Wikimedia Commons.
-      places = await _enrichWithWikimediaPhotos(
-        places, latitude, longitude, radius,
-      );
-
-      _cache[cacheKey] = _CacheEntry(DateTime.now(), places);
-      _evictCacheIfNeeded();
-
-      debugPrint('ExploreApiService: got ${places.length} nearby places');
-      return places;
-    } catch (error) {
-      debugPrint('ExploreApiService: searchNearby failed: $error');
-      if (cached != null) return cached.data;
-      rethrow;
+    if (response.statusCode != 200) {
+      throw Exception('Overpass API error ${response.statusCode}');
     }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    final elements = decoded['elements'] as List<dynamic>? ?? [];
+
+    var places = elements
+        .cast<Map<String, dynamic>>()
+        .where((e) {
+          final tags = e['tags'] as Map<String, dynamic>? ?? {};
+          final name = tags['name'] ?? tags['name:vi'] ?? tags['name:en'];
+          return name != null && name.toString().trim().isNotEmpty;
+        })
+        .expand((e) {
+          try {
+            return [NearbyPlace.fromOverpassJson(e)];
+          } on FormatException catch (error) {
+            debugPrint('ExploreApiService: skipping invalid place: $error');
+            return <NearbyPlace>[];
+          }
+        })
+        .toList();
+
+    // Enrich places with photos from Wikimedia Commons.
+    places = await _enrichWithWikimediaPhotos(
+      places,
+      latitude,
+      longitude,
+      radius,
+    );
+
+    _cache[cacheKey] = _CacheEntry(DateTime.now(), places);
+    _evictCacheIfNeeded();
+
+    debugPrint(
+      'ExploreApiService: got ${places.length} nearby places from $url',
+    );
+    return places;
   }
 
   /// Text search using Nominatim API.
@@ -112,7 +156,8 @@ out body qt $maxResults;
   }) async {
     if (query.trim().isEmpty) return [];
 
-    final cacheKey = '${latitude.toStringAsFixed(3)}_'
+    final cacheKey =
+        '${latitude.toStringAsFixed(3)}_'
         '${longitude.toStringAsFixed(3)}_q_$query';
     final cached = _cache[cacheKey];
     if (cached != null &&
@@ -127,7 +172,8 @@ out body qt $maxResults;
           'q': query,
           'format': 'jsonv2',
           'limit': maxResults.toString(),
-          'viewbox': '${longitude - offset},${latitude + offset},'
+          'viewbox':
+              '${longitude - offset},${latitude + offset},'
               '${longitude + offset},${latitude - offset}',
           'bounded': '0',
           'addressdetails': '1',
@@ -153,7 +199,14 @@ out body qt $maxResults;
             final name = e['display_name'] ?? '';
             return name.toString().trim().isNotEmpty;
           })
-          .map((e) => NearbyPlace.fromNominatimJson(e))
+          .expand((e) {
+            try {
+              return [NearbyPlace.fromNominatimJson(e)];
+            } on FormatException catch (error) {
+              debugPrint('ExploreApiService: skipping invalid place: $error');
+              return <NearbyPlace>[];
+            }
+          })
           .toList();
 
       _cache[cacheKey] = _CacheEntry(DateTime.now(), places);
@@ -172,14 +225,15 @@ out body qt $maxResults;
   /// Get readable address (city/district) from coordinates via Nominatim
   Future<String?> reverseGeocode(double lat, double lng) async {
     try {
-      final uri = Uri.parse('https://nominatim.openstreetmap.org/reverse').replace(
-        queryParameters: {
-          'lat': lat.toString(),
-          'lon': lng.toString(),
-          'format': 'jsonv2',
-          'accept-language': 'vi',
-        },
-      );
+      final uri = Uri.parse('https://nominatim.openstreetmap.org/reverse')
+          .replace(
+            queryParameters: {
+              'lat': lat.toString(),
+              'lon': lng.toString(),
+              'format': 'jsonv2',
+              'accept-language': 'vi',
+            },
+          );
       final response = await _client
           .get(uri, headers: {'User-Agent': _userAgent})
           .timeout(const Duration(seconds: 5));
@@ -188,11 +242,18 @@ out body qt $maxResults;
         final decoded = jsonDecode(response.body) as Map<String, dynamic>;
         final address = decoded['address'] as Map<String, dynamic>?;
         if (address != null) {
-          final district = address['city_district'] ?? address['suburb'] ?? address['county'];
+          final district =
+              address['city_district'] ??
+              address['suburb'] ??
+              address['county'];
           final city = address['city'] ?? address['town'] ?? address['state'];
           if (district != null && city != null) return '$district, $city';
           if (city != null) return city.toString();
-          return decoded['display_name']?.toString().split(',').take(2).join(', ');
+          return decoded['display_name']
+              ?.toString()
+              .split(',')
+              .take(2)
+              .join(', ');
         }
       }
     } catch (e) {
@@ -282,7 +343,8 @@ out body qt $maxResults;
       if (wikiPhotos.isEmpty) return places;
 
       debugPrint(
-          'ExploreApiService: found ${wikiPhotos.length} Wikimedia photos');
+        'ExploreApiService: found ${wikiPhotos.length} Wikimedia photos',
+      );
 
       // Assign each photo to the closest place that needs one.
       final result = List<NearbyPlace>.from(places);
@@ -296,8 +358,10 @@ out body qt $maxResults;
         for (var i = 0; i < wikiPhotos.length; i++) {
           if (assignedPhotos.contains(i)) continue;
           final dist = _haversineDistance(
-            place.latitude, place.longitude,
-            wikiPhotos[i].lat, wikiPhotos[i].lng,
+            place.latitude,
+            place.longitude,
+            wikiPhotos[i].lat,
+            wikiPhotos[i].lng,
           );
           if (dist < bestDist && dist < 200) {
             // Max 200m distance
@@ -307,8 +371,9 @@ out body qt $maxResults;
         }
 
         if (bestPhotoIdx >= 0) {
-          result[placeIdx] =
-              place.copyWith(photoUrl: wikiPhotos[bestPhotoIdx].url);
+          result[placeIdx] = place.copyWith(
+            photoUrl: wikiPhotos[bestPhotoIdx].url,
+          );
           assignedPhotos.add(bestPhotoIdx);
         }
       }
@@ -322,14 +387,17 @@ out body qt $maxResults;
 
   /// Haversine distance in meters between two coordinates.
   static double _haversineDistance(
-    double lat1, double lng1, double lat2, double lng2,
+    double lat1,
+    double lng1,
+    double lat2,
+    double lng2,
   ) {
     const earthRadius = 6371000.0; // meters
     final dLat = _toRad(lat2 - lat1);
     final dLng = _toRad(lng2 - lng1);
-    final a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(_toRad(lat1)) * cos(_toRad(lat2)) *
-        sin(dLng / 2) * sin(dLng / 2);
+    final a =
+        sin(dLat / 2) * sin(dLat / 2) +
+        cos(_toRad(lat1)) * cos(_toRad(lat2)) * sin(dLng / 2) * sin(dLng / 2);
     return earthRadius * 2 * atan2(sqrt(a), sqrt(1 - a));
   }
 

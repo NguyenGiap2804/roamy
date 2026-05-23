@@ -18,6 +18,7 @@ class ExplorePlaceCard extends StatelessWidget {
     required this.category,
     required this.imageUrl,
     required this.onTap,
+    this.distanceText,
   });
 
   factory ExplorePlaceCard.fromPlace({
@@ -40,6 +41,7 @@ class ExplorePlaceCard extends StatelessWidget {
     Key? key,
     required NearbyPlace place,
     required VoidCallback onTap,
+    String? distanceText,
   }) {
     return ExplorePlaceCard(
       key: key,
@@ -49,6 +51,7 @@ class ExplorePlaceCard extends StatelessWidget {
       category: place.category,
       imageUrl: place.safeImageUrl,
       onTap: onTap,
+      distanceText: distanceText,
     );
   }
 
@@ -58,6 +61,7 @@ class ExplorePlaceCard extends StatelessWidget {
   final String category;
   final String imageUrl;
   final VoidCallback onTap;
+  final String? distanceText;
 
   @override
   Widget build(BuildContext context) {
@@ -87,7 +91,7 @@ class ExplorePlaceCard extends StatelessWidget {
                   child: Image.network(
                     imageUrl,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
                   ),
                 ),
 
@@ -133,6 +137,37 @@ class ExplorePlaceCard extends StatelessWidget {
                   ),
                 ),
               ),
+
+              // Distance badge (top-right)
+              if (distanceText != null)
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.directions_walk_rounded,
+                            size: 10, color: Colors.white),
+                        const SizedBox(width: 3),
+                        Text(
+                          distanceText!,
+                          style: const TextStyle(
+                             color: Colors.white,
+                             fontSize: 9,
+                             fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
 
               // Content at bottom
               Positioned(

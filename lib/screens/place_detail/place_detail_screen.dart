@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
+import '../../core/utils/google_maps_urls.dart';
 import '../../models/place.dart';
 import '../../models/schedule.dart';
 import '../../providers/place_provider.dart';
@@ -351,15 +352,13 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                         label: 'Mở Google Maps',
                         icon: Icons.map_rounded,
                         onPressed: () async {
-                          Uri? uri;
-                          if (place.mapsUrl != null &&
-                              place.mapsUrl!.isNotEmpty) {
-                            uri = Uri.parse(place.mapsUrl!);
-                          } else if (place.hasCoordinates) {
-                            uri = Uri.parse(
-                              'https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}',
-                            );
-                          }
+                          final uri = buildGoogleMapsLaunchUri(
+                            mapsUrl: place.mapsUrl,
+                            name: place.name,
+                            address: place.address,
+                            latitude: place.latitude,
+                            longitude: place.longitude,
+                          );
 
                           if (uri != null) {
                             try {

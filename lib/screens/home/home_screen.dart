@@ -18,12 +18,13 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final exploreProvider = context.read<ExploreProvider>();
       if (!exploreProvider.initialLoadDone) {
@@ -34,8 +35,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _searchController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    context.read<ExploreProvider>().refreshLocationIfStale();
   }
 
   @override
@@ -90,10 +98,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: exploreProvider.availableCategories.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(width: 8),
                       itemBuilder: (context, index) {
-                        final cat =
-                            exploreProvider.availableCategories[index];
+                        final cat = exploreProvider.availableCategories[index];
                         final isSelected =
                             cat == exploreProvider.selectedCategory;
                         return ChoiceChip(
@@ -103,8 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               exploreProvider.changeCategory(cat),
                           selectedColor: AppColors.primary,
                           labelStyle: TextStyle(
-                            color:
-                                isSelected ? Colors.white : null,
+                            color: isSelected ? Colors.white : null,
                             fontWeight: FontWeight.w700,
                             fontSize: 13,
                           ),
@@ -112,9 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             borderRadius: BorderRadius.circular(20),
                           ),
                           showCheckmark: false,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
                         );
                       },
                     ),
@@ -125,7 +130,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (isSearchActive) ...[
                   _SearchResultsSection(exploreProvider: exploreProvider),
                 ]
-
                 // ── Loading state ──
                 else if (exploreProvider.isLoading &&
                     exploreProvider.nearbyPlaces.isEmpty)
@@ -144,7 +148,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   )
-
                 // ── Error state ──
                 else if (exploreProvider.errorMessage != null &&
                     exploreProvider.nearbyPlaces.isEmpty)
@@ -172,7 +175,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   )
-
                 // ── Default: Nearby + Popular + Saved ──
                 else ...[
                   // 📍 Nearby section
@@ -187,14 +189,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         itemCount: exploreProvider.nearbyPlaces.length,
-                        separatorBuilder: (_, __) =>
+                        separatorBuilder: (context, index) =>
                             const SizedBox(width: 14),
                         itemBuilder: (context, index) {
                           final place = exploreProvider.nearbyPlaces[index];
                           return ExplorePlaceCard.fromNearby(
                             place: place,
-                            onTap: () =>
-                                NearbyDetailSheet.show(context, place),
+                            distanceText: exploreProvider.getDistanceString(
+                              place,
+                            ),
+                            onTap: () => NearbyDetailSheet.show(context, place),
                           );
                         },
                       ),
@@ -209,21 +213,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: Icons.local_fire_department_rounded,
                     ),
                     const SizedBox(height: 14),
-                    ...List.generate(
-                      exploreProvider.popularPlaces.length,
-                      (index) {
-                        final place = exploreProvider.popularPlaces[index];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: PopularPlaceCard(
-                            place: place,
-                            index: index,
-                            onTap: () =>
-                                NearbyDetailSheet.show(context, place),
-                          ),
-                        );
-                      },
-                    ),
+                    ...List.generate(exploreProvider.popularPlaces.length, (
+                      index,
+                    ) {
+                      final place = exploreProvider.popularPlaces[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: PopularPlaceCard(
+                          place: place,
+                          index: index,
+                          onTap: () => NearbyDetailSheet.show(context, place),
+                        ),
+                      );
+                    }),
                   ],
 
                   // Empty state
@@ -235,8 +237,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           Icon(
                             Icons.explore_off_rounded,
                             size: 48,
-                            color:
-                                AppColors.textSecondary.withValues(alpha: 0.5),
+                            color: AppColors.textSecondary.withValues(
+                              alpha: 0.5,
+                            ),
                           ),
                           const SizedBox(height: 12),
                           const Text(
@@ -307,11 +310,12 @@ class _SearchResultsSection extends StatelessWidget {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: exploreProvider.searchResults.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 14),
+            separatorBuilder: (context, index) => const SizedBox(width: 14),
             itemBuilder: (context, index) {
               final place = exploreProvider.searchResults[index];
               return ExplorePlaceCard.fromNearby(
                 place: place,
+                distanceText: exploreProvider.getDistanceString(place),
                 onTap: () => NearbyDetailSheet.show(context, place),
               );
             },
@@ -339,10 +343,7 @@ class _GreetingHeader extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Khám phá hôm nay 🌏',
-                    style: AppTextStyles.headline,
-                  ),
+                  Text('Khám phá hôm nay 🌏', style: AppTextStyles.headline),
                   const SizedBox(height: 6),
                   Row(
                     children: [

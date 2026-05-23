@@ -123,7 +123,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
 
     final rating = _draftDouble(draft['rating']);
     if (rating != null) {
-      _rating = rating;
+      _rating = _clampRating(rating);
     }
 
     final latitude = _draftDouble(draft['latitude']);
@@ -267,9 +267,9 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
       if (!mounted) return;
 
       if (placeData.hasAnyData) {
-        final review = placeData.review;
         setState(() {
           _applyExtractedPlaceData(placeData);
+          final review = placeData.merge(_currentFormPlaceData()).review;
           _extractionReview = review;
           _showExtractionReview = review.needsManualReview;
         });
@@ -301,9 +301,23 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     _updateField(_priceRangeController, data.priceRange);
     _updateField(_openingHoursController, data.openingHours);
     _updateField(_phoneController, data.phone);
-    _rating = data.rating ?? _rating;
+    _updateField(_imageUrlController, data.imageUrl);
+    _rating = data.rating != null ? _clampRating(data.rating!) : _rating;
     _latitude = data.latitude ?? _latitude;
     _longitude = data.longitude ?? _longitude;
+  }
+
+  GoogleMapsPlaceData _currentFormPlaceData() {
+    return GoogleMapsPlaceData(
+      name: _nullableText(_nameController),
+      address: _nullableText(_addressController),
+      priceRange: _nullableText(_priceRangeController),
+      openingHours: _nullableText(_openingHoursController),
+      phone: _nullableText(_phoneController),
+      imageUrl: _nullableText(_imageUrlController),
+      latitude: _latitude,
+      longitude: _longitude,
+    );
   }
 
   void _resetExtractionReview() {
@@ -400,7 +414,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
       final phone = _nullableText(_phoneController);
       final mapsUrl = _nullableText(_mapsUrlController);
       final note = _nullableText(_noteController);
-      final rating = _rating;
+      final rating = _clampRating(_rating);
 
       if (_isEditing) {
         final p = widget.place!;
@@ -506,6 +520,10 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value.trim());
     return null;
+  }
+
+  double _clampRating(double value) {
+    return value.clamp(1.0, 5.0).toDouble();
   }
 
   @override
@@ -690,8 +708,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                         ),
                       ],
                     )
-                  else if (_isEditing &&
-                      _imageUrlController.text.trim().isNotEmpty)
+                  else if (_imageUrlController.text.trim().isNotEmpty)
                     Stack(
                       children: [
                         ClipRRect(
