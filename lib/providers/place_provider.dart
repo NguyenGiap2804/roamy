@@ -234,6 +234,7 @@ class PlaceProvider extends ChangeNotifier {
       priceRange: (data['priceRange'] as String?)?.trim() ?? '',
       openingHours: (data['openingHours'] as String?)?.trim() ?? '',
       phone: _asNullableString(data['phone']),
+      website: _asNullableString(data['website']),
       mapsUrl: _asNullableString(data['mapsUrl']),
       note: _asNullableString(data['note']),
       imageUrl: _asNullableString(data['imageUrl']),
@@ -257,6 +258,9 @@ class PlaceProvider extends ChangeNotifier {
       phone: data.containsKey('phone')
           ? _asNullableString(data['phone'])
           : place.phone,
+      website: data.containsKey('website')
+          ? _asNullableString(data['website'])
+          : place.website,
       mapsUrl: data.containsKey('mapsUrl')
           ? _asNullableString(data['mapsUrl'])
           : place.mapsUrl,

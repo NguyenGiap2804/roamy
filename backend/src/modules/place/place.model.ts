@@ -7,6 +7,7 @@ const placeBaseSchema = z.object({
   priceRange: z.string().trim().optional().nullable(),
   openingHours: z.string().trim().optional().nullable(),
   phone: z.string().trim().optional().nullable(),
+  website: z.url('website must be a valid URL').optional().nullable(),
   mapsUrl: z.url('mapsUrl must be a valid URL').optional().nullable(),
   note: z.string().trim().optional().nullable(),
   imageUrl: z.url('imageUrl must be a valid URL').optional().nullable(),

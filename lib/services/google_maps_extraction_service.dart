@@ -34,6 +34,7 @@ class GoogleMapsPlaceData {
     this.priceRange,
     this.openingHours,
     this.phone,
+    this.website,
     this.imageUrl,
     this.rating,
     this.latitude,
@@ -45,6 +46,7 @@ class GoogleMapsPlaceData {
   final String? priceRange;
   final String? openingHours;
   final String? phone;
+  final String? website;
   final String? imageUrl;
   final double? rating;
   final double? latitude;
@@ -56,6 +58,7 @@ class GoogleMapsPlaceData {
     final hasPriceRange = _clean(priceRange) != null;
     final hasOpeningHours = _clean(openingHours) != null;
     final hasPhone = _clean(phone) != null;
+    final hasWebsite = _clean(website) != null;
     final hasImage = _clean(imageUrl) != null;
     final hasRating = rating != null && rating! >= 1 && rating! <= 5;
     final hasCoordinates = hasUsableCoordinates(latitude, longitude);
@@ -66,6 +69,7 @@ class GoogleMapsPlaceData {
     if (hasCoordinates) score += 0.24;
     if (hasOpeningHours) score += 0.08;
     if (hasPhone) score += 0.06;
+    if (hasWebsite) score += 0.04;
     if (hasImage) score += 0.04;
     if (hasPriceRange) score += 0.04;
     if (hasRating) score += 0.02;
@@ -77,6 +81,7 @@ class GoogleMapsPlaceData {
     if (hasCoordinates) capturedFields.add('Toa do');
     if (hasOpeningHours) capturedFields.add('Gio mo cua');
     if (hasPhone) capturedFields.add('So dien thoai');
+    if (hasWebsite) capturedFields.add('Website');
     if (hasImage) capturedFields.add('Hinh anh');
     if (hasPriceRange) capturedFields.add('Khoang gia');
     if (hasRating) capturedFields.add('Danh gia');
@@ -124,6 +129,7 @@ class GoogleMapsPlaceData {
         priceRange != null ||
         openingHours != null ||
         phone != null ||
+        website != null ||
         imageUrl != null ||
         rating != null ||
         latitude != null ||
@@ -137,6 +143,7 @@ class GoogleMapsPlaceData {
       priceRange: _prefer(priceRange, other.priceRange),
       openingHours: _prefer(openingHours, other.openingHours),
       phone: _prefer(phone, other.phone),
+      website: _prefer(website, other.website),
       imageUrl: _prefer(imageUrl, other.imageUrl),
       rating: rating ?? other.rating,
       latitude: latitude ?? other.latitude,
@@ -230,6 +237,7 @@ class GoogleMapsExtractionService {
       priceRange: _findPriceRange(text, strings),
       openingHours: _findOpeningHours(strings),
       phone: _findPhone(strings),
+      website: _findWebsite(strings),
       rating: _findRating(text, strings),
       latitude: coords.$1,
       longitude: coords.$2,
@@ -603,6 +611,14 @@ class GoogleMapsExtractionService {
     return null;
   }
 
+  String? _findWebsite(List<String> strings) {
+    for (final value in strings) {
+      final cleaned = _clean(value);
+      if (_isExternalWebsiteUrl(cleaned)) return cleaned;
+    }
+    return null;
+  }
+
   String? _findOpeningHours(List<String> strings) {
     String? fallback;
     for (final value in strings) {
@@ -916,6 +932,7 @@ class GoogleMapsExtractionService {
             _normalizePriceRange(rawPriceRange) ?? _clean(rawPriceRange),
         openingHours: _structuredOpeningHours(placeNode),
         phone: _clean(placeNode['telephone']?.toString()),
+        website: _structuredWebsite(placeNode),
         imageUrl: _structuredImageUrl(placeNode['image']),
         rating: _structuredRating(placeNode['aggregateRating']),
         latitude:
@@ -947,6 +964,35 @@ class GoogleMapsExtractionService {
     if (value is Map<String, dynamic>) {
       return _structuredImageUrl(value['url']) ??
           _structuredImageUrl(value['contentUrl']);
+    }
+
+    return null;
+  }
+
+  String? _structuredWebsite(Map<String, dynamic> value) {
+    for (final key in const ['url', 'website', 'sameAs']) {
+      final website = _structuredWebsiteValue(value[key]);
+      if (website != null) return website;
+    }
+    return null;
+  }
+
+  String? _structuredWebsiteValue(dynamic value) {
+    if (value is String) {
+      final cleaned = _clean(value);
+      return _isExternalWebsiteUrl(cleaned) ? cleaned : null;
+    }
+
+    if (value is List) {
+      for (final item in value) {
+        final website = _structuredWebsiteValue(item);
+        if (website != null) return website;
+      }
+    }
+
+    if (value is Map<String, dynamic>) {
+      return _structuredWebsiteValue(value['url']) ??
+          _structuredWebsiteValue(value['@id']);
     }
 
     return null;
@@ -1151,6 +1197,26 @@ bool _isHttpImageUrl(String? value) {
   if (value == null) return false;
   final uri = Uri.tryParse(value);
   return uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
+}
+
+bool _isExternalWebsiteUrl(String? value) {
+  if (value == null) return false;
+  final uri = Uri.tryParse(value);
+  if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+    return false;
+  }
+
+  final host = uri.host.toLowerCase();
+  if (host.isEmpty) return false;
+  if (host.contains('google.') ||
+      host == 'maps.app.goo.gl' ||
+      host == 'goo.gl' ||
+      host.contains('gstatic.com') ||
+      host.contains('googleusercontent.com')) {
+    return false;
+  }
+
+  return true;
 }
 
 bool _isRedirect(int statusCode) {

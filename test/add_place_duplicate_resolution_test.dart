@@ -263,7 +263,7 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
   });
 
-  testWidgets('save auto-fills missing core fields from a Google Maps link', (
+  testWidgets('save auto-fills missing details from a Google Maps link', (
     tester,
   ) async {
     await _useTallSurface(tester);
@@ -275,6 +275,7 @@ void main() {
         priceRange: '1-100.000 d/nguoi',
         openingHours: 'Dang mo cua',
         phone: '+84 869 622 074',
+        website: 'https://ancafe.vn',
         imageUrl: 'https://example.com/an-cafe.jpg',
         rating: 4.4,
         latitude: 21.115297,
@@ -320,7 +321,73 @@ void main() {
       placeService.createdData?['imageUrl'],
       'https://example.com/an-cafe.jpg',
     );
+    expect(placeService.createdData?['website'], 'https://ancafe.vn');
     expect(placeService.createdData?['rating'], 4.4);
+    expect(placeService.createdData?['latitude'], 21.115297);
+    expect(placeService.createdData?['longitude'], 105.958210);
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('save enriches missing Maps details without replacing edits', (
+    tester,
+  ) async {
+    await _useTallSurface(tester);
+    final placeService = _CapturingPlaceService();
+    final mapsService = _FakeMapsExtractionService(
+      const GoogleMapsPlaceData(
+        name: 'Extracted cafe',
+        address: 'Extracted address',
+        priceRange: '1-100.000 d/nguoi',
+        openingHours: 'Dang mo cua',
+        phone: '+84 869 622 074',
+        website: 'https://ancafe.vn',
+        imageUrl: 'https://example.com/an-cafe.jpg',
+        rating: 4.4,
+        latitude: 21.115297,
+        longitude: 105.958210,
+      ),
+    );
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(
+            create: (_) => CategoryProvider(_FakeCategoryService()),
+          ),
+          ChangeNotifierProvider(create: (_) => PlaceProvider(placeService)),
+        ],
+        child: MaterialApp(
+          home: AddPlaceScreen(
+            prefilledDraft: const {
+              'mapsUrl': 'https://maps.app.goo.gl/test-place',
+              'name': 'Manual cafe name',
+              'address': 'Manual edited address',
+            },
+            mapsExtractionService: mapsService,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('addPlaceFormSaveButton')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('addPlaceFormSaveButton')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(mapsService.calls, 1);
+    expect(placeService.createdData?['name'], 'Manual cafe name');
+    expect(placeService.createdData?['address'], 'Manual edited address');
+    expect(placeService.createdData?['phone'], '+84 869 622 074');
+    expect(placeService.createdData?['website'], 'https://ancafe.vn');
+    expect(
+      placeService.createdData?['imageUrl'],
+      'https://example.com/an-cafe.jpg',
+    );
     expect(placeService.createdData?['latitude'], 21.115297);
     expect(placeService.createdData?['longitude'], 105.958210);
     await tester.pump(const Duration(seconds: 3));

@@ -9,6 +9,7 @@ class Place {
     required this.priceRange,
     required this.openingHours,
     this.phone,
+    this.website,
     this.mapsUrl,
     this.note,
     this.imageUrl,
@@ -27,6 +28,7 @@ class Place {
   final String priceRange;
   final String openingHours;
   final String? phone;
+  final String? website;
   final String? mapsUrl;
   final String? note;
   final String? imageUrl;
@@ -47,6 +49,7 @@ class Place {
       priceRange: json['priceRange'] as String,
       openingHours: json['openingHours'] as String,
       phone: json['phone'] as String?,
+      website: json['website'] as String?,
       mapsUrl: json['mapsUrl'] as String?,
       note: json['note'] as String?,
       imageUrl: json['imageUrl'] as String?,
@@ -73,6 +76,7 @@ class Place {
       'priceRange': priceRange,
       'openingHours': openingHours,
       'phone': phone,
+      'website': website,
       'mapsUrl': mapsUrl,
       'note': note,
       'imageUrl': imageUrl,
@@ -91,6 +95,7 @@ class Place {
     String? priceRange,
     String? openingHours,
     Object? phone = _unset,
+    Object? website = _unset,
     Object? mapsUrl = _unset,
     Object? note = _unset,
     Object? imageUrl = _unset,
@@ -109,6 +114,7 @@ class Place {
       priceRange: priceRange ?? this.priceRange,
       openingHours: openingHours ?? this.openingHours,
       phone: identical(phone, _unset) ? this.phone : phone as String?,
+      website: identical(website, _unset) ? this.website : website as String?,
       mapsUrl: identical(mapsUrl, _unset) ? this.mapsUrl : mapsUrl as String?,
       note: identical(note, _unset) ? this.note : note as String?,
       imageUrl: identical(imageUrl, _unset)
@@ -133,9 +139,12 @@ class Place {
   bool get hasPriceRange => priceRange.trim().isNotEmpty;
   bool get hasOpeningHours => openingHours.trim().isNotEmpty;
   bool get hasPhone => phone?.trim().isNotEmpty == true;
+  bool get hasWebsite => website?.trim().isNotEmpty == true;
   bool get hasMapsUrl => mapsUrl?.trim().isNotEmpty == true;
   bool get hasCoordinates => hasUsableCoordinates(latitude, longitude);
   String get safePhone => phone?.isNotEmpty == true ? phone! : 'Not added yet';
+  String get safeWebsite =>
+      website?.isNotEmpty == true ? website! : 'Not added yet';
   String get safeMapsUrl =>
       mapsUrl?.isNotEmpty == true ? mapsUrl! : 'Not added yet';
   String get safeNote =>

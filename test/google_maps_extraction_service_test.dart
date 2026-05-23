@@ -128,6 +128,7 @@ void main() {
         "image": "https://lh5.googleusercontent.com/p/example=w408-h306-k-no",
         "openingHours": ["Mon-Sun 08:00-22:00"],
         "telephone": "+84 123 456 789",
+        "url": "https://thecofftea.example",
         "aggregateRating": {
           "@type": "AggregateRating",
           "ratingValue": "4.6"
@@ -159,8 +160,21 @@ void main() {
       'https://lh5.googleusercontent.com/p/example=w408-h306-k-no',
     );
     expect(data.rating, 4.6);
+    expect(data.website, 'https://thecofftea.example');
     expect(data.latitude, 21.0123);
     expect(data.longitude, 105.85);
+  });
+
+  test('extracts website from quoted Google Maps strings', () {
+    const previewPayload = '''
+)]}'
+[null,null,null,null,[[3724.79587088432,105.520821,21.0008138]],null,["The Cofftea","https://thecofftea.example","Website"]]
+''';
+
+    final service = GoogleMapsExtractionService();
+    final data = service.extractFromPreviewBody(previewPayload);
+
+    expect(data.website, 'https://thecofftea.example');
   });
 
   test('extracts preview image from HTML metadata', () {

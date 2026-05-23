@@ -53,6 +53,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
   final _priceRangeController = TextEditingController();
   final _openingHoursController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _websiteController = TextEditingController();
   final _noteController = TextEditingController();
   final _imageUrlController = TextEditingController();
   final _formScrollController = ScrollController();
@@ -79,6 +80,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
         _priceRangeController.text.trim().isNotEmpty ||
         _openingHoursController.text.trim().isNotEmpty ||
         _phoneController.text.trim().isNotEmpty ||
+        _websiteController.text.trim().isNotEmpty ||
         _selectedImage != null ||
         _latitude != null ||
         _longitude != null;
@@ -104,6 +106,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     _priceRangeController.dispose();
     _openingHoursController.dispose();
     _phoneController.dispose();
+    _websiteController.dispose();
     _noteController.dispose();
     _imageUrlController.dispose();
     _formScrollController.dispose();
@@ -118,6 +121,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     _priceRangeController.text = place.priceRange;
     _openingHoursController.text = place.openingHours;
     _phoneController.text = place.phone ?? '';
+    _websiteController.text = place.website ?? '';
     _noteController.text = place.note ?? '';
     _imageUrlController.text = place.imageUrl ?? '';
     _selectedCategoryId = place.categoryId;
@@ -135,6 +139,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     _applyDraftText(_priceRangeController, draft['priceRange']);
     _applyDraftText(_openingHoursController, draft['openingHours']);
     _applyDraftText(_phoneController, draft['phone']);
+    _applyDraftText(_websiteController, draft['website']);
     _applyDraftText(_noteController, draft['note']);
     _applyDraftText(_imageUrlController, draft['imageUrl']);
 
@@ -272,7 +277,10 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     );
   }
 
-  Future<bool> _autoFillFromMapsUrl({bool showFeedback = true}) async {
+  Future<bool> _autoFillFromMapsUrl({
+    bool showFeedback = true,
+    bool onlyMissing = false,
+  }) async {
     var url = _mapsUrlController.text.trim();
     if (url.isEmpty || _isAutoFilling) return false;
     if (RegExp(r'(^|//)ps\.app\.goo\.gl').hasMatch(url)) {
@@ -290,7 +298,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
 
       if (placeData.hasAnyData) {
         setState(() {
-          _applyExtractedPlaceData(placeData);
+          _applyExtractedPlaceData(placeData, onlyMissing: onlyMissing);
           final review = placeData.merge(_currentFormPlaceData()).review;
           _extractionReview = review;
           _showExtractionReview = review.needsManualReview;
@@ -325,13 +333,25 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     return false;
   }
 
-  void _applyExtractedPlaceData(GoogleMapsPlaceData data) {
-    _updateField(_nameController, data.name);
-    _updateField(_addressController, data.address);
-    _updateField(_priceRangeController, data.priceRange);
-    _updateField(_openingHoursController, data.openingHours);
-    _updateField(_phoneController, data.phone);
-    _updateField(_imageUrlController, data.imageUrl);
+  void _applyExtractedPlaceData(
+    GoogleMapsPlaceData data, {
+    bool onlyMissing = false,
+  }) {
+    _updateField(_nameController, data.name, onlyMissing: onlyMissing);
+    _updateField(_addressController, data.address, onlyMissing: onlyMissing);
+    _updateField(
+      _priceRangeController,
+      data.priceRange,
+      onlyMissing: onlyMissing,
+    );
+    _updateField(
+      _openingHoursController,
+      data.openingHours,
+      onlyMissing: onlyMissing,
+    );
+    _updateField(_phoneController, data.phone, onlyMissing: onlyMissing);
+    _updateField(_websiteController, data.website, onlyMissing: onlyMissing);
+    _updateField(_imageUrlController, data.imageUrl, onlyMissing: onlyMissing);
     _rating = data.rating != null ? _clampRating(data.rating!) : _rating;
     _latitude = data.latitude ?? _latitude;
     _longitude = data.longitude ?? _longitude;
@@ -344,6 +364,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
       priceRange: _nullableText(_priceRangeController),
       openingHours: _nullableText(_openingHoursController),
       phone: _nullableText(_phoneController),
+      website: _nullableText(_websiteController),
       imageUrl: _nullableText(_imageUrlController),
       latitude: _latitude,
       longitude: _longitude,
@@ -395,8 +416,13 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
         'Danh mục';
   }
 
-  void _updateField(TextEditingController controller, String? value) {
+  void _updateField(
+    TextEditingController controller,
+    String? value, {
+    bool onlyMissing = false,
+  }) {
     if (value == null || value.trim().isEmpty) return;
+    if (onlyMissing && controller.text.trim().isNotEmpty) return;
     controller.text = value.trim();
   }
 
@@ -443,7 +469,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
   }
 
   Future<void> _save() async {
-    await _autoFillMissingCoreFieldsBeforeSave();
+    await _autoFillMissingDetailsBeforeSave();
     if (!mounted) return;
     if (!_formKey.currentState!.validate()) return;
 
@@ -478,6 +504,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
       final priceRange = _priceRangeController.text.trim();
       final openingHours = _openingHoursController.text.trim();
       final phone = _nullableText(_phoneController);
+      final website = _nullableText(_websiteController);
       final mapsUrl = _nullableText(_mapsUrlController);
       final note = _nullableText(_noteController);
       final rating = _clampRating(_rating);
@@ -491,6 +518,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
             p.priceRange != priceRange ||
             p.openingHours != openingHours ||
             p.phone != phone ||
+            p.website != website ||
             p.mapsUrl != mapsUrl ||
             p.note != note ||
             p.imageUrl != uploadedImageUrl ||
@@ -518,6 +546,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
         'priceRange': priceRange,
         'openingHours': openingHours,
         'phone': phone,
+        'website': website,
         'mapsUrl': mapsUrl,
         'note': note,
         'imageUrl': uploadedImageUrl,
@@ -555,6 +584,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
             'priceRange': _priceRangeController.text.trim(),
             'openingHours': _openingHoursController.text.trim(),
             'phone': _nullableText(_phoneController),
+            'website': _nullableText(_websiteController),
             'mapsUrl': _nullableText(_mapsUrlController),
             'note': _nullableText(_noteController),
             'imageUrl': uploadedImageUrl,
@@ -571,16 +601,23 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     }
   }
 
-  Future<void> _autoFillMissingCoreFieldsBeforeSave() async {
+  Future<void> _autoFillMissingDetailsBeforeSave() async {
     final hasMapsUrl = _mapsUrlController.text.trim().isNotEmpty;
     if (!hasMapsUrl) return;
 
-    final missingCoreFields =
+    final missingDetails =
         _nameController.text.trim().isEmpty ||
-        _addressController.text.trim().isEmpty;
-    if (!missingCoreFields) return;
+        _addressController.text.trim().isEmpty ||
+        _priceRangeController.text.trim().isEmpty ||
+        _openingHoursController.text.trim().isEmpty ||
+        _phoneController.text.trim().isEmpty ||
+        _websiteController.text.trim().isEmpty ||
+        _imageUrlController.text.trim().isEmpty ||
+        _latitude == null ||
+        _longitude == null;
+    if (!missingDetails) return;
 
-    await _autoFillFromMapsUrl(showFeedback: false);
+    await _autoFillFromMapsUrl(showFeedback: false, onlyMissing: true);
   }
 
   String? _nullableText(TextEditingController controller) {
@@ -701,6 +738,7 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                       priceRange: _priceRangeController.text.trim(),
                       openingHours: _openingHoursController.text.trim(),
                       phone: _phoneController.text.trim(),
+                      website: _websiteController.text.trim(),
                       imageUrl: _imageUrlController.text.trim(),
                       selectedImage: _selectedImage,
                       rating: _rating,
@@ -784,6 +822,14 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
                     label: 'Số điện thoại',
                     icon: Icons.phone_rounded,
                     keyboardType: TextInputType.phone,
+                    requiredField: false,
+                    onChanged: _handlePreviewFieldChanged,
+                  ),
+                  _Input(
+                    controller: _websiteController,
+                    label: 'Website',
+                    icon: Icons.language_rounded,
+                    keyboardType: TextInputType.url,
                     requiredField: false,
                     onChanged: _handlePreviewFieldChanged,
                   ),
@@ -947,6 +993,7 @@ class _PlacePreviewCard extends StatelessWidget {
     required this.priceRange,
     required this.openingHours,
     required this.phone,
+    required this.website,
     required this.imageUrl,
     required this.selectedImage,
     required this.rating,
@@ -962,6 +1009,7 @@ class _PlacePreviewCard extends StatelessWidget {
   final String priceRange;
   final String openingHours;
   final String phone;
+  final String website;
   final String imageUrl;
   final File? selectedImage;
   final double rating;
@@ -998,6 +1046,7 @@ class _PlacePreviewCard extends StatelessWidget {
     final hasPriceRange = priceRange.isNotEmpty;
     final hasOpeningHours = openingHours.isNotEmpty;
     final hasPhone = phone.isNotEmpty;
+    final hasWebsite = website.isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1044,6 +1093,8 @@ class _PlacePreviewCard extends StatelessWidget {
                 ),
               if (hasPhone)
                 _PreviewMetaRow(icon: Icons.phone_rounded, text: phone),
+              if (hasWebsite)
+                _PreviewMetaRow(icon: Icons.language_rounded, text: website),
               if (hasPriceRange)
                 _PreviewMetaRow(icon: Icons.payments_rounded, text: priceRange),
               const SizedBox(height: AppSpacing.lg),

@@ -24,6 +24,7 @@ model Place {
   priceRange   String
   openingHours String
   phone        String?
+  website      String?
   mapsUrl      String?
   note         String?
   imageUrl     String?

@@ -78,6 +78,7 @@ class NearbyPlace {
     String? priceRange,
     String? openingHours,
     String? phone,
+    String? website,
     String? imageUrl,
   }) {
     final draft = <String, dynamic>{
@@ -100,6 +101,8 @@ class NearbyPlace {
     if (hours != null) draft['openingHours'] = hours;
     final phoneNumber = _firstNonBlank(phone, this.phone);
     if (phoneNumber != null) draft['phone'] = phoneNumber;
+    final websiteUrl = _firstNonBlank(website, this.website);
+    if (websiteUrl != null) draft['website'] = websiteUrl;
 
     return draft;
   }
