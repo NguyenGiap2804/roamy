@@ -1,11 +1,13 @@
 import '../core/network/api_client.dart';
 import '../core/network/api_endpoints.dart';
 import '../models/schedule.dart';
+import 'telemetry_service.dart';
 
 class ScheduleService {
-  ScheduleService(this._apiClient);
+  ScheduleService(this._apiClient, [this._telemetryService]);
 
   final ApiClient _apiClient;
+  final TelemetryService? _telemetryService;
 
   Future<List<Schedule>> getSchedules() async {
     final data = await _apiClient.get(ApiEndpoints.schedules);
@@ -25,23 +27,86 @@ class ScheduleService {
   }
 
   Future<Schedule> createSchedule(Map<String, dynamic> data) async {
-    final response = await _apiClient.post(
-      ApiEndpoints.schedules,
-      _apiPayload(data),
-    );
-    return Schedule.fromJson(response as Map<String, dynamic>);
+    try {
+      final response = await _apiClient.post(
+        ApiEndpoints.schedules,
+        _apiPayload(data),
+      );
+      final schedule = Schedule.fromJson(response as Map<String, dynamic>);
+      _track('create', schedule);
+      return schedule;
+    } catch (error) {
+      _trackFailure('create', error, data);
+      rethrow;
+    }
   }
 
   Future<Schedule> updateSchedule(String id, Map<String, dynamic> data) async {
-    final response = await _apiClient.patch(
-      ApiEndpoints.scheduleById(id),
-      _apiPayload(data),
-    );
-    return Schedule.fromJson(response as Map<String, dynamic>);
+    try {
+      final response = await _apiClient.patch(
+        ApiEndpoints.scheduleById(id),
+        _apiPayload(data),
+      );
+      final schedule = Schedule.fromJson(response as Map<String, dynamic>);
+      _track('update', schedule);
+      return schedule;
+    } catch (error) {
+      _trackFailure('update', error, data, resourceId: id);
+      rethrow;
+    }
   }
 
   Future<void> deleteSchedule(String id) async {
-    await _apiClient.delete(ApiEndpoints.scheduleById(id));
+    try {
+      await _apiClient.delete(ApiEndpoints.scheduleById(id));
+      _telemetryService?.track(
+        type: 'schedule',
+        action: 'delete',
+        resourceType: 'schedule',
+        resourceId: id,
+        screen: 'schedule',
+      );
+    } catch (error) {
+      _trackFailure('delete', error, const {}, resourceId: id);
+      rethrow;
+    }
+  }
+
+  void _track(String action, Schedule schedule) {
+    _telemetryService?.track(
+      type: 'schedule',
+      action: action,
+      resourceType: 'schedule',
+      resourceId: schedule.id,
+      screen: 'schedule',
+      metadata: {
+        'placeId': schedule.placeId,
+        'date': schedule.date.toIso8601String(),
+        'time': schedule.time,
+      },
+    );
+  }
+
+  void _trackFailure(
+    String action,
+    Object error,
+    Map<String, dynamic> data, {
+    String? resourceId,
+  }) {
+    _telemetryService?.track(
+      type: 'schedule',
+      action: '${action}_failed',
+      resourceType: 'schedule',
+      resourceId: resourceId,
+      screen: 'schedule',
+      message: error.toString(),
+      severity: 'WARN',
+      metadata: {
+        'placeId': data['placeId'],
+        'date': data['date'],
+        'time': data['time'],
+      },
+    );
   }
 }
 

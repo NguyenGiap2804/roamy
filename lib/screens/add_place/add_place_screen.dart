@@ -16,7 +16,9 @@ import '../../core/utils/snackbar_helper.dart';
 import '../../models/place.dart';
 import '../../providers/category_provider.dart';
 import '../../providers/place_provider.dart';
+import '../../services/device_identity_service.dart';
 import '../../services/google_maps_extraction_service.dart';
+import '../../services/telemetry_service.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/rating_stars.dart';
 import 'image_sync_status.dart';
@@ -206,6 +208,10 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
 
     final uri = Uri.parse('${ApiEndpoints.baseUrl}/upload');
     final request = http.MultipartRequest('POST', uri);
+    try {
+      request.headers['x-roamy-device-id'] =
+          await DeviceIdentityService.instance.getDeviceId();
+    } catch (_) {}
     request.files.add(
       await http.MultipartFile.fromPath(
         'image',
@@ -221,10 +227,23 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
       final jsonResponse =
           jsonDecode(responseData.body) as Map<String, dynamic>;
       final data = jsonResponse['data'] as Map<String, dynamic>;
+      _trackEvent(
+        type: 'upload',
+        action: 'image_upload_success',
+        metadata: {'bytes': imageSize},
+      );
       return data['url'] as String?;
     }
 
-    throw UploadException(_uploadErrorMessage(responseData.body));
+    final message = _uploadErrorMessage(responseData.body);
+    _trackEvent(
+      type: 'upload',
+      action: 'image_upload_failed',
+      message: message,
+      severity: 'WARN',
+      metadata: {'statusCode': response.statusCode, 'bytes': imageSize},
+    );
+    throw UploadException(message);
   }
 
   MediaType _contentTypeForImage(String path) {
@@ -298,6 +317,11 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
   }) async {
     var url = _mapsUrlController.text.trim();
     if (url.isEmpty || _isAutoFilling) return false;
+    _trackEvent(
+      type: 'google_maps',
+      action: 'autofill_start',
+      metadata: {'urlHost': _safeHost(url), 'onlyMissing': onlyMissing},
+    );
     if (RegExp(r'(^|//)ps\.app\.goo\.gl').hasMatch(url)) {
       url = url.replaceFirst('ps.app.goo.gl', 'maps.app.goo.gl');
       _mapsUrlController.text = url;
@@ -324,6 +348,17 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
             'Đã tự động điền thông tin từ Google Maps',
           );
         }
+        _trackEvent(
+          type: 'google_maps',
+          action: 'autofill_success',
+          metadata: {
+            'hasName': _nameController.text.trim().isNotEmpty,
+            'hasAddress': _addressController.text.trim().isNotEmpty,
+            'hasImage': _imageUrlController.text.trim().isNotEmpty,
+            'hasCoordinates': _latitude != null && _longitude != null,
+            'needsManualReview': _showExtractionReview,
+          },
+        );
         return true;
       } else {
         setState(() {
@@ -336,12 +371,25 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
             'Không tìm thấy thông tin trong link này',
           );
         }
+        _trackEvent(
+          type: 'google_maps',
+          action: 'autofill_empty',
+          severity: 'WARN',
+          metadata: {'urlHost': _safeHost(url)},
+        );
       }
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return false;
       if (showFeedback) {
         SnackBarHelper.showError(context, 'Lỗi trích xuất link Google Maps');
       }
+      _trackEvent(
+        type: 'google_maps',
+        action: 'autofill_failed',
+        severity: 'WARN',
+        message: error.toString(),
+        metadata: {'urlHost': _safeHost(url)},
+      );
     } finally {
       if (mounted) setState(() => _isAutoFilling = false);
     }
@@ -611,6 +659,14 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
     } catch (error) {
       if (!mounted) return;
       if (error is ApiException && error.statusCode == 409) {
+        _trackEvent(
+          type: 'place',
+          action: 'duplicate_conflict',
+          resourceType: 'place',
+          screen: 'add_place',
+          severity: 'WARN',
+          message: error.message,
+        );
         await _handleDuplicatePlaceConflict(
           placeProvider,
           error,
@@ -677,6 +733,35 @@ class _AddPlaceScreenState extends State<AddPlaceScreen> {
 
   double _clampRating(double value) {
     return value.clamp(1.0, 5.0).toDouble();
+  }
+
+  void _trackEvent({
+    required String type,
+    String? action,
+    String? resourceType,
+    String? resourceId,
+    String? screen,
+    String? message,
+    String severity = 'INFO',
+    Map<String, Object?>? metadata,
+  }) {
+    try {
+      context.read<TelemetryService>().track(
+        type: type,
+        action: action,
+        resourceType: resourceType,
+        resourceId: resourceId,
+        screen: screen ?? 'add_place',
+        message: message,
+        severity: severity,
+        metadata: metadata,
+      );
+    } catch (_) {}
+  }
+
+  String? _safeHost(String value) {
+    final withScheme = value.startsWith('http') ? value : 'https://$value';
+    return Uri.tryParse(withScheme)?.host;
   }
 
   @override

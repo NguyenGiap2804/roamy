@@ -17,12 +17,18 @@ class ApiException implements Exception {
 }
 
 class ApiClient {
-  ApiClient({http.Client? client, String? baseUrl})
+  ApiClient({
+    http.Client? client,
+    String? baseUrl,
+    Future<String?> Function()? deviceIdProvider,
+  })
     : _client = client ?? http.Client(),
-      _baseUrl = baseUrl ?? ApiEndpoints.baseUrl;
+      _baseUrl = baseUrl ?? ApiEndpoints.baseUrl,
+      _deviceIdProvider = deviceIdProvider;
 
   final http.Client _client;
   final String _baseUrl;
+  final Future<String?> Function()? _deviceIdProvider;
   static const _timeout = Duration(seconds: 12);
 
   Future<dynamic> get(String endpoint, {Map<String, String>? query}) {
@@ -50,15 +56,16 @@ class ApiClient {
     final uri = Uri.parse('$_baseUrl$endpoint').replace(queryParameters: query);
 
     try {
+      final headers = await _headers();
       final request = switch (method) {
-        'POST' => _client.post(uri, headers: _headers, body: jsonEncode(body)),
+        'POST' => _client.post(uri, headers: headers, body: jsonEncode(body)),
         'PATCH' => _client.patch(
           uri,
-          headers: _headers,
+          headers: headers,
           body: jsonEncode(body),
         ),
-        'DELETE' => _client.delete(uri, headers: _headers),
-        _ => _client.get(uri, headers: _headers),
+        'DELETE' => _client.delete(uri, headers: headers),
+        _ => _client.get(uri, headers: headers),
       };
 
       final response = await request.timeout(_timeout);
@@ -72,10 +79,24 @@ class ApiClient {
     }
   }
 
-  Map<String, String> get _headers => const {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-  };
+  Future<Map<String, String>> _headers() async {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+
+    final deviceIdProvider = _deviceIdProvider;
+    if (deviceIdProvider != null) {
+      try {
+        final deviceId = await deviceIdProvider();
+        if (deviceId != null && deviceId.trim().isNotEmpty) {
+          headers['x-roamy-device-id'] = deviceId.trim();
+        }
+      } catch (_) {}
+    }
+
+    return headers;
+  }
 
   dynamic _handleResponse(http.Response response) {
     final decoded = response.body.isEmpty ? null : jsonDecode(response.body);

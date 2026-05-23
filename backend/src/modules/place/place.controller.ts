@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 
+import { observabilityService } from '../observability/observability.service';
 import { sendResponse } from '../../utils/response';
 import { placeService } from './place.service';
 
@@ -28,6 +29,16 @@ export class PlaceController {
   async create(req: Request, res: Response, next: NextFunction) {
     try {
       const place = await placeService.create(req.body);
+      void observabilityService.recordSystemEvent({
+        type: 'place',
+        action: 'create',
+        resourceType: 'place',
+        resourceId: place.id,
+        message: `Created place ${place.name}`,
+        deviceId: req.deviceId,
+        requestId: req.requestId,
+        metadata: { name: place.name, categoryId: place.categoryId },
+      });
       return sendResponse(res, 201, 'Place created successfully', place);
     } catch (error) {
       return next(error);
@@ -37,6 +48,16 @@ export class PlaceController {
   async update(req: Request, res: Response, next: NextFunction) {
     try {
       const place = await placeService.update(req.params.id as string, req.body);
+      void observabilityService.recordSystemEvent({
+        type: 'place',
+        action: 'update',
+        resourceType: 'place',
+        resourceId: place.id,
+        message: `Updated place ${place.name}`,
+        deviceId: req.deviceId,
+        requestId: req.requestId,
+        metadata: { changedFields: Object.keys(req.body ?? {}) },
+      });
       return sendResponse(res, 200, 'Place updated successfully', place);
     } catch (error) {
       return next(error);
@@ -46,6 +67,15 @@ export class PlaceController {
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
       const deleted = await placeService.delete(req.params.id as string);
+      void observabilityService.recordSystemEvent({
+        type: 'place',
+        action: 'delete',
+        resourceType: 'place',
+        resourceId: deleted.id,
+        message: `Deleted place ${deleted.id}`,
+        deviceId: req.deviceId,
+        requestId: req.requestId,
+      });
       return sendResponse(res, 200, 'Place deleted successfully', deleted);
     } catch (error) {
       return next(error);

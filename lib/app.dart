@@ -10,11 +10,13 @@ import 'providers/schedule_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/splash_screen.dart';
 import 'services/category_service.dart';
+import 'services/device_identity_service.dart';
 import 'services/google_places_service.dart';
 import 'services/location_service.dart';
 import 'services/notification_service.dart';
 import 'services/place_service.dart';
 import 'services/schedule_service.dart';
+import 'services/telemetry_service.dart';
 
 class RoamyApp extends StatelessWidget {
   const RoamyApp({super.key});
@@ -23,18 +25,37 @@ class RoamyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        Provider<ApiClient>(create: (_) => ApiClient()),
+        Provider<DeviceIdentityService>.value(
+          value: DeviceIdentityService.instance,
+        ),
+        Provider<ApiClient>(
+          create: (context) => ApiClient(
+            deviceIdProvider: context.read<DeviceIdentityService>().getDeviceId,
+          ),
+        ),
+        Provider<TelemetryService>(
+          create: (context) => TelemetryService(context.read<ApiClient>()),
+        ),
         Provider<NotificationService>.value(
           value: NotificationService.instance,
         ),
         Provider<PlaceService>(
-          create: (context) => PlaceService(context.read<ApiClient>()),
+          create: (context) => PlaceService(
+            context.read<ApiClient>(),
+            context.read<TelemetryService>(),
+          ),
         ),
         Provider<CategoryService>(
-          create: (context) => CategoryService(context.read<ApiClient>()),
+          create: (context) => CategoryService(
+            context.read<ApiClient>(),
+            context.read<TelemetryService>(),
+          ),
         ),
         Provider<ScheduleService>(
-          create: (context) => ScheduleService(context.read<ApiClient>()),
+          create: (context) => ScheduleService(
+            context.read<ApiClient>(),
+            context.read<TelemetryService>(),
+          ),
         ),
         // ── Explore System services ──
         Provider<LocationService>.value(value: LocationService.instance),

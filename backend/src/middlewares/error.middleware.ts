@@ -1,6 +1,10 @@
 import { NextFunction, Request, Response } from "express";
 import { Prisma } from "@prisma/client";
 
+import {
+  observabilityService,
+  sanitizeForLog,
+} from "../modules/observability/observability.service";
 import { AppError } from "../utils/errors";
 
 export function notFoundHandler(req: Request, res: Response) {
@@ -72,6 +76,17 @@ function logServerError(req: Request, error: Error) {
       : error instanceof Prisma.PrismaClientKnownRequestError
       ? 400
       : 500;
+
+  void observabilityService.recordApiError({
+    requestId: req.requestId ?? null,
+    method: req.method,
+    path: req.originalUrl,
+    statusCode,
+    name: error.name,
+    message: error.message,
+    details: sanitizeForLog(error instanceof AppError ? error.details : null),
+    deviceId: req.deviceId ?? null,
+  });
 
   console.error("[Roamy API Error]", {
     method: req.method,

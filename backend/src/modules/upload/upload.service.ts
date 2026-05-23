@@ -2,7 +2,9 @@ import { v2 as cloudinary } from 'cloudinary';
 import fs from 'fs/promises';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { ImageAssetStatus, ImageStorageKind } from '@prisma/client';
 
+import { observabilityService } from '../observability/observability.service';
 import { AppError, ValidationError } from '../../utils/errors';
 
 const uploadsDir = path.join(process.cwd(), 'uploads');
@@ -18,22 +20,44 @@ export const supportedImageMimeTypes = new Set([
 ]);
 
 export class UploadService {
-  async uploadImage(file: Express.Multer.File, requestOrigin: string) {
+  async uploadImage(
+    file: Express.Multer.File,
+    requestOrigin: string,
+    context: UploadRequestContext = {},
+  ) {
     validateUploadedImage(file);
 
-    if (this.hasCloudinaryConfig()) {
-      return this.uploadToCloudinary(file);
-    }
+    try {
+      if (this.hasCloudinaryConfig()) {
+        const url = await this.uploadToCloudinary(file);
+        void this.recordImage(file, url, ImageStorageKind.CLOUDINARY, context);
+        return url;
+      }
 
-    if (process.env.NODE_ENV === 'production') {
-      throw new AppError(
-        503,
-        'Image storage is not configured. Set Cloudinary environment variables before accepting uploads.',
-        { missingEnvVars: this.missingCloudinaryEnvVars() },
-      );
-    }
+      if (process.env.NODE_ENV === 'production') {
+        const error = new AppError(
+          503,
+          'Image storage is not configured. Set Cloudinary environment variables before accepting uploads.',
+          { missingEnvVars: this.missingCloudinaryEnvVars() },
+        );
+        void this.recordImageFailure(file, ImageStorageKind.UNCONFIGURED, error, context);
+        throw error;
+      }
 
-    return this.uploadToLocalDisk(file, requestOrigin);
+      const url = await this.uploadToLocalDisk(file, requestOrigin);
+      void this.recordImage(file, url, ImageStorageKind.LOCAL, context);
+      return url;
+    } catch (error) {
+      if (!(error instanceof AppError)) {
+        void this.recordImageFailure(
+          file,
+          this.hasCloudinaryConfig() ? ImageStorageKind.CLOUDINARY : ImageStorageKind.LOCAL,
+          error,
+          context,
+        );
+      }
+      throw error;
+    }
   }
 
   private async uploadToLocalDisk(
@@ -92,9 +116,51 @@ export class UploadService {
       'CLOUDINARY_API_SECRET',
     ].filter((key) => !process.env[key]);
   }
+
+  private recordImage(
+    file: Express.Multer.File,
+    url: string,
+    storage: ImageStorageKind,
+    context: UploadRequestContext,
+  ) {
+    return observabilityService.recordImageAsset({
+      url,
+      storage,
+      status: ImageAssetStatus.SUCCESS,
+      mimeType: file.mimetype,
+      sizeBytes: file.size,
+      originalName: file.originalname,
+      deviceId: context.deviceId,
+      requestId: context.requestId,
+    });
+  }
+
+  private recordImageFailure(
+    file: Express.Multer.File,
+    storage: ImageStorageKind,
+    error: unknown,
+    context: UploadRequestContext,
+  ) {
+    return observabilityService.recordImageAsset({
+      url: 'unavailable',
+      storage,
+      status: ImageAssetStatus.FAILED,
+      mimeType: file.mimetype,
+      sizeBytes: file.size,
+      originalName: file.originalname,
+      deviceId: context.deviceId,
+      requestId: context.requestId,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 export const uploadService = new UploadService();
+
+type UploadRequestContext = {
+  deviceId?: string | null;
+  requestId?: string | null;
+};
 
 export function validateUploadedImage(file: Express.Multer.File) {
   if (!supportedImageMimeTypes.has(file.mimetype)) {

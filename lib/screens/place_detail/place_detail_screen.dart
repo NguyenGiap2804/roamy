@@ -174,6 +174,55 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
     }
   }
 
+  Future<void> _openShareCardSheet(BuildContext context, Place place) {
+    return showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Share Roamy Card', style: AppTextStyles.title),
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(18),
+              decoration: _cardDecoration(sheetContext),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(place.name, style: AppTextStyles.title),
+                  const SizedBox(height: 8),
+                  Text(place.address, style: AppTextStyles.caption),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Saved with Roamy',
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            PrimaryButton(
+              label: 'Share now',
+              icon: Icons.ios_share_rounded,
+              onPressed: () => Navigator.of(sheetContext).pop(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Place>(
@@ -407,6 +456,13 @@ class _PlaceDetailScreenState extends State<PlaceDetailScreen> {
                             ),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 10),
+                      PrimaryButton(
+                        label: 'Share card',
+                        icon: Icons.ios_share_rounded,
+                        secondary: true,
+                        onPressed: () => _openShareCardSheet(context, place),
                       ),
                       SizedBox(
                         height: MediaQuery.of(context).padding.bottom + 24,

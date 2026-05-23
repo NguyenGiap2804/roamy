@@ -54,8 +54,105 @@ model Schedule {
   @@index([date])
 }
 
+model SystemEvent {
+  id           String              @id @default(uuid())
+  type         String
+  action       String?
+  resourceType String?
+  resourceId   String?
+  screen       String?
+  message      String?
+  severity     SystemEventSeverity @default(INFO)
+  deviceId     String?
+  requestId    String?
+  metadata     Json?
+  occurredAt   DateTime            @default(now())
+  createdAt    DateTime            @default(now())
+
+  @@index([createdAt])
+  @@index([occurredAt])
+  @@index([type])
+  @@index([deviceId])
+  @@index([resourceType, resourceId])
+}
+
+model ApiRequestLog {
+  id             String   @id @default(uuid())
+  requestId      String   @unique
+  method         String
+  path           String
+  statusCode     Int
+  durationMs     Int
+  deviceId       String?
+  userAgent      String?
+  ipAddress      String?
+  query          Json?
+  responseStatus String
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([method])
+  @@index([statusCode])
+  @@index([deviceId])
+}
+
+model ApiErrorLog {
+  id         String   @id @default(uuid())
+  requestId  String?
+  method     String
+  path       String
+  statusCode Int
+  name       String
+  message    String
+  details    Json?
+  deviceId   String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([statusCode])
+  @@index([path])
+  @@index([deviceId])
+}
+
+model ImageAsset {
+  id          String           @id @default(uuid())
+  url         String
+  storage     ImageStorageKind
+  status      ImageAssetStatus @default(SUCCESS)
+  mimeType    String?
+  sizeBytes   Int?
+  originalName String?
+  deviceId    String?
+  requestId   String?
+  errorMessage String?
+  createdAt   DateTime         @default(now())
+
+  @@index([createdAt])
+  @@index([storage])
+  @@index([status])
+  @@index([deviceId])
+}
+
 enum ScheduleStatus {
   UPCOMING
   DONE
   CANCELLED
+}
+
+enum SystemEventSeverity {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+}
+
+enum ImageStorageKind {
+  CLOUDINARY
+  LOCAL
+  UNCONFIGURED
+}
+
+enum ImageAssetStatus {
+  SUCCESS
+  FAILED
 }

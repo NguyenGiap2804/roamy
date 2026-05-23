@@ -11,6 +11,7 @@ class ApiEndpoints {
   static const categories = '/categories';
   static const places = '/places';
   static const schedules = '/schedules';
+  static const events = '/events';
 
   static String placeById(String id) => '$places/$id';
   static String scheduleById(String id) => '$schedules/$id';

@@ -32,6 +32,10 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+backend/admin/dist/
+backend/admin/node_modules/
+backend/admin/tsconfig.tsbuildinfo
+backend/uploads/
 
 # Symbolication related
 app.*.symbols

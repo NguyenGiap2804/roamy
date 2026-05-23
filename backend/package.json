@@ -5,10 +5,12 @@
   "main": "dist/src/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "prisma generate && tsc",
+    "build": "npm run build:admin && prisma generate && tsc",
+    "build:admin": "npm --prefix admin ci --include=dev && npm --prefix admin run build",
     "postinstall": "prisma generate",
     "start": "node dist/src/server.js",
     "deploy:start": "prisma migrate deploy && node dist/src/server.js",
+    "test": "tsx --test test/*.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "seed": "tsx prisma/seed.ts"
