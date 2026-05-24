@@ -35,7 +35,7 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(input.password, 12);
     const existing = await prisma.user.findUnique({ where: { email } });
 
-    if (existing?.passwordHash) {
+    if (existing?.passwordHash && existing.emailVerifiedAt) {
       throw new ConflictError('Email is already registered');
     }
 
