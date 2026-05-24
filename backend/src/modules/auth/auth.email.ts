@@ -1,3 +1,4 @@
+import { setDefaultResultOrder } from 'dns';
 import nodemailer from 'nodemailer';
 import SMTPTransport from 'nodemailer/lib/smtp-transport';
 
@@ -24,6 +25,8 @@ export async function sendAuthEmail(input: AuthEmailInput) {
     console.log('[Roamy Auth Email]', input);
     return;
   }
+
+  setDefaultResultOrder('ipv4first');
 
   const transportOptions = {
     host,
