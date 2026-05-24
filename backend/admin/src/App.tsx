@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { AdminApi, AuthExpiredError, QueryOptions } from './api';
-import { AppShell, Section } from './components/AppShell';
-import { DetailDrawer } from './components/DetailDrawer';
-import { LoginScreen } from './components/LoginScreen';
+import { AdminApi, AuthExpiredError, QueryOptions } from "./api";
+import { AppShell, Section } from "./components/AppShell";
+import { DetailDrawer } from "./components/DetailDrawer";
+import { LoginScreen } from "./components/LoginScreen";
 import {
   ActivityPage,
   CategoriesPage,
@@ -17,9 +17,10 @@ import {
   SettingsPage,
   UploadsPage,
   UsersPage,
-} from './pages/DashboardPages';
+} from "./pages/DashboardPages";
 import type {
   AdminSession,
+  AdminCreatedUser,
   AdminUser,
   ApiErrorLog,
   ApiRequestLog,
@@ -37,7 +38,7 @@ import type {
   Schedule,
   ScheduleUpdatePayload,
   SystemEvent,
-} from './types';
+} from "./types";
 
 type ListFilters = QueryOptions & {
   page: number;
@@ -55,7 +56,7 @@ type ListState = {
   users: ListResponse<AdminUser>;
 };
 
-const sessionKey = 'roamy-admin-session';
+const sessionKey = "roamy-admin-session";
 const refreshIntervalMs = 10_000;
 
 const defaultFilters: ListFilters = {
@@ -79,14 +80,17 @@ export function App() {
     const raw = localStorage.getItem(sessionKey);
     return raw ? (JSON.parse(raw) as AdminSession) : null;
   });
-  const [active, setActive] = useState<Section>('overview');
+  const [active, setActive] = useState<Section>("overview");
   const [overview, setOverview] = useState<Overview | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const [lists, setLists] = useState<ListState>(emptyLists);
-  const [referenceCategories, setReferenceCategories] = useState<Category[]>([]);
+  const [referenceCategories, setReferenceCategories] = useState<Category[]>(
+    [],
+  );
   const [referencePlaces, setReferencePlaces] = useState<Place[]>([]);
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [filters, setFilters] = useState<Record<string, ListFilters>>({});
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [loadingSection, setLoadingSection] = useState<Section | null>(null);
@@ -113,11 +117,11 @@ export function App() {
     (loadError: unknown) => {
       if (loadError instanceof AuthExpiredError) {
         logout();
-        return 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.';
+        return "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.";
       }
       return loadError instanceof Error
         ? loadError.message
-        : 'Không tải được dữ liệu';
+        : "Không tải được dữ liệu";
     },
     [logout],
   );
@@ -134,19 +138,25 @@ export function App() {
     (section: Section): QueryOptions => ({
       ...sectionFilters(section),
       q: query,
+      ...(selectedUser && isUserScopedSection(section)
+        ? { userId: selectedUser.id }
+        : {}),
     }),
-    [query, sectionFilters],
+    [query, sectionFilters, selectedUser],
   );
 
   const loadReferences = useCallback(async () => {
     if (!session) return;
+    const query: QueryOptions = selectedUser
+      ? { limit: 100, userId: selectedUser.id }
+      : { limit: 100 };
     const [categories, places] = await Promise.all([
-      api.categories({ limit: 100 }),
-      api.places({ limit: 100 }),
+      api.categories(query),
+      api.places(query),
     ]);
     setReferenceCategories(categories.items);
     setReferencePlaces(places.items);
-  }, [api, session]);
+  }, [api, selectedUser, session]);
 
   const loadCurrent = useCallback(
     async (silent = false) => {
@@ -157,50 +167,54 @@ export function App() {
       setError(null);
 
       try {
-        if (active === 'overview') {
+        if (active === "overview") {
           const [nextOverview, nextHealth] = await Promise.all([
             api.overview(),
             api.health(),
           ]);
           setOverview(nextOverview);
           setHealth(nextHealth);
-        } else if (active === 'settings') {
+        } else if (active === "settings") {
           const [nextHealth, nextRetentionPreview] = await Promise.all([
             api.health(),
             api.retentionPreview(),
           ]);
           setHealth(nextHealth);
           setRetentionPreview(nextRetentionPreview);
-        } else if (active === 'health') {
+        } else if (active === "health") {
           setHealth(await api.health());
-        } else if (active === 'places') {
+        } else if (active === "places") {
           const places = await api.places(listQuery(active));
           setLists((current) => ({ ...current, places }));
-        } else if (active === 'categories') {
+        } else if (active === "categories") {
           const categories = await api.categories(listQuery(active));
           setLists((current) => ({ ...current, categories }));
           setReferenceCategories(categories.items);
-        } else if (active === 'schedules') {
+        } else if (active === "schedules") {
           const schedules = await api.schedules(listQuery(active));
           setLists((current) => ({ ...current, schedules }));
-        } else if (active === 'activity') {
+        } else if (active === "activity") {
           const activity = await api.activity(listQuery(active));
           setLists((current) => ({ ...current, activity }));
-        } else if (active === 'errors') {
+        } else if (active === "errors") {
           const errors = await api.errors(listQuery(active));
           setLists((current) => ({ ...current, errors }));
-        } else if (active === 'requests') {
+        } else if (active === "requests") {
           const requests = await api.requests(listQuery(active));
           setLists((current) => ({ ...current, requests }));
-        } else if (active === 'uploads') {
+        } else if (active === "uploads") {
           const uploads = await api.uploads(listQuery(active));
           setLists((current) => ({ ...current, uploads }));
-        } else if (active === 'users') {
+        } else if (active === "users") {
           const users = await api.users(listQuery(active));
           setLists((current) => ({ ...current, users }));
         }
 
-        if (active !== 'overview' && active !== 'health' && active !== 'settings') {
+        if (
+          active !== "overview" &&
+          active !== "health" &&
+          active !== "settings"
+        ) {
           setHealth(await api.health());
         }
         setLastUpdatedAt(new Date());
@@ -214,7 +228,9 @@ export function App() {
   );
 
   useEffect(() => {
-    void loadReferences().catch((loadError) => setError(handleError(loadError)));
+    void loadReferences().catch((loadError) =>
+      setError(handleError(loadError)),
+    );
   }, [handleError, loadReferences]);
 
   useEffect(() => {
@@ -224,7 +240,7 @@ export function App() {
   useEffect(() => {
     if (!session || !autoRefreshEnabled) return;
     const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === "visible") {
         void loadCurrent(true);
       }
     }, refreshIntervalMs);
@@ -254,14 +270,14 @@ export function App() {
     payload: PlaceUpdatePayload | CategoryUpdatePayload | ScheduleUpdatePayload,
   ) {
     try {
-      if (target.kind === 'place') {
+      if (target.kind === "place") {
         await api.updatePlace(target.item.id, payload as PlaceUpdatePayload);
-      } else if (target.kind === 'category') {
+      } else if (target.kind === "category") {
         await api.updateCategory(
           target.item.id,
           payload as CategoryUpdatePayload,
         );
-      } else if (target.kind === 'schedule') {
+      } else if (target.kind === "schedule") {
         await api.updateSchedule(
           target.item.id,
           payload as ScheduleUpdatePayload,
@@ -277,11 +293,11 @@ export function App() {
 
   async function deleteItem(target: DrawerState) {
     try {
-      if (target.kind === 'place') {
+      if (target.kind === "place") {
         await api.deletePlace(target.item.id);
-      } else if (target.kind === 'category') {
+      } else if (target.kind === "category") {
         await api.deleteCategory(target.item.id);
-      } else if (target.kind === 'schedule') {
+      } else if (target.kind === "schedule") {
         await api.deleteSchedule(target.item.id);
       }
       setDrawer(null);
@@ -290,6 +306,72 @@ export function App() {
       setError(handleError(mutationError));
       throw mutationError;
     }
+  }
+
+  async function createUser(payload: {
+    name: string;
+    email: string;
+  }): Promise<AdminCreatedUser> {
+    try {
+      const result = await api.createUser(payload);
+      await reloadAfterMutation();
+      return result;
+    } catch (mutationError) {
+      setError(handleError(mutationError));
+      throw mutationError;
+    }
+  }
+
+  async function deleteUser(user: AdminUser, confirmEmail: string) {
+    try {
+      await api.deleteUser(user.id, confirmEmail);
+      if (selectedUser?.id === user.id) {
+        setSelectedUser(null);
+      }
+      setDrawer(null);
+      await reloadAfterMutation();
+    } catch (mutationError) {
+      setError(handleError(mutationError));
+      throw mutationError;
+    }
+  }
+
+  const openDrawer = useCallback(
+    (nextDrawer: DrawerState) => {
+      setDrawer(nextDrawer);
+
+      if (nextDrawer.kind !== "user") {
+        return;
+      }
+
+      void api
+        .userSummary(nextDrawer.item.id)
+        .then((detail) => {
+          setDrawer((current) =>
+            current?.kind === "user" && current.item.id === nextDrawer.item.id
+              ? { ...current, detail }
+              : current,
+          );
+        })
+        .catch((loadError) => setError(handleError(loadError)));
+    },
+    [api, handleError],
+  );
+
+  function focusUser(user: AdminUser) {
+    setSelectedUser(user);
+    setDrawer(null);
+    setActive("places");
+    setFilters((current) => ({
+      ...current,
+      places: { ...defaultFilters, ...(current.places ?? {}), page: 1 },
+      categories: { ...defaultFilters, ...(current.categories ?? {}), page: 1 },
+      schedules: { ...defaultFilters, ...(current.schedules ?? {}), page: 1 },
+      activity: { ...defaultFilters, ...(current.activity ?? {}), page: 1 },
+      errors: { ...defaultFilters, ...(current.errors ?? {}), page: 1 },
+      requests: { ...defaultFilters, ...(current.requests ?? {}), page: 1 },
+      uploads: { ...defaultFilters, ...(current.uploads ?? {}), page: 1 },
+    }));
   }
 
   async function checkImages() {
@@ -334,7 +416,7 @@ export function App() {
 
   function changeQuery(value: string) {
     setQuery(value);
-    if (active !== 'overview' && active !== 'health' && active !== 'settings') {
+    if (active !== "overview" && active !== "health" && active !== "settings") {
       changeFilters(active, { page: 1 });
     }
   }
@@ -346,14 +428,30 @@ export function App() {
       health={health}
       lastUpdatedAt={lastUpdatedAt}
       query={query}
+      selectedUser={selectedUser}
       session={activeSession}
       onActiveChange={setActive}
+      onClearSelectedUser={() => setSelectedUser(null)}
       onLogout={logout}
       onQueryChange={changeQuery}
       onRefresh={() => void loadCurrent()}
     >
       {error && <div className="error-banner">{error}</div>}
       {loadingSection && <div className="loading-bar" />}
+      {selectedUser && isUserScopedSection(active) && (
+        <div className="scope-banner">
+          <span>
+            Đang xem dữ liệu của <strong>{selectedUser.email}</strong>
+          </span>
+          <button
+            className="secondary-button compact"
+            onClick={() => setSelectedUser(null)}
+            type="button"
+          >
+            Xem tất cả
+          </button>
+        </div>
+      )}
       <section className="content">{renderActive()}</section>
       {drawer && (
         <DetailDrawer
@@ -362,6 +460,8 @@ export function App() {
           places={referencePlaces}
           onClose={() => setDrawer(null)}
           onDelete={deleteItem}
+          onDeleteUser={deleteUser}
+          onFocusUser={focusUser}
           onUpdate={updateItem}
         />
       )}
@@ -369,100 +469,97 @@ export function App() {
   );
 
   function renderActive() {
-    if (active === 'overview') {
+    if (active === "overview") {
       return (
-        <OverviewPage
-          health={health}
-          overview={overview}
-          onOpen={setDrawer}
-        />
+        <OverviewPage health={health} overview={overview} onOpen={openDrawer} />
       );
     }
-    if (active === 'places') {
+    if (active === "places") {
       return (
         <PlacesPage
           categories={referenceCategories}
           data={lists.places}
-          filters={sectionFilters('places')}
-          onFilterChange={(patch) => changeFilters('places', patch)}
-          onOpen={setDrawer}
+          filters={sectionFilters("places")}
+          onFilterChange={(patch) => changeFilters("places", patch)}
+          onOpen={openDrawer}
         />
       );
     }
-    if (active === 'categories') {
+    if (active === "categories") {
       return (
         <CategoriesPage
           data={lists.categories}
-          filters={sectionFilters('categories')}
-          onFilterChange={(patch) => changeFilters('categories', patch)}
-          onOpen={setDrawer}
+          filters={sectionFilters("categories")}
+          onFilterChange={(patch) => changeFilters("categories", patch)}
+          onOpen={openDrawer}
         />
       );
     }
-    if (active === 'schedules') {
+    if (active === "schedules") {
       return (
         <SchedulesPage
           data={lists.schedules}
-          filters={sectionFilters('schedules')}
-          onFilterChange={(patch) => changeFilters('schedules', patch)}
-          onOpen={setDrawer}
+          filters={sectionFilters("schedules")}
+          onFilterChange={(patch) => changeFilters("schedules", patch)}
+          onOpen={openDrawer}
         />
       );
     }
-    if (active === 'activity') {
+    if (active === "activity") {
       return (
         <ActivityPage
           data={lists.activity}
-          filters={sectionFilters('activity')}
-          onFilterChange={(patch) => changeFilters('activity', patch)}
-          onOpen={setDrawer}
+          filters={sectionFilters("activity")}
+          onFilterChange={(patch) => changeFilters("activity", patch)}
+          onOpen={openDrawer}
         />
       );
     }
-    if (active === 'errors') {
+    if (active === "errors") {
       return (
         <ErrorsPage
           data={lists.errors}
-          filters={sectionFilters('errors')}
-          onFilterChange={(patch) => changeFilters('errors', patch)}
-          onOpen={setDrawer}
+          filters={sectionFilters("errors")}
+          onFilterChange={(patch) => changeFilters("errors", patch)}
+          onOpen={openDrawer}
         />
       );
     }
-    if (active === 'requests') {
+    if (active === "requests") {
       return (
         <RequestsPage
           data={lists.requests}
-          filters={sectionFilters('requests')}
-          onFilterChange={(patch) => changeFilters('requests', patch)}
-          onOpen={setDrawer}
+          filters={sectionFilters("requests")}
+          onFilterChange={(patch) => changeFilters("requests", patch)}
+          onOpen={openDrawer}
         />
       );
     }
-    if (active === 'uploads') {
+    if (active === "uploads") {
       return (
         <UploadsPage
           data={lists.uploads}
-          filters={sectionFilters('uploads')}
+          filters={sectionFilters("uploads")}
           imageHealthReport={imageHealthReport}
           isCheckingImages={checkingImages}
           onCheckImages={() => void checkImages()}
-          onFilterChange={(patch) => changeFilters('uploads', patch)}
-          onOpen={setDrawer}
+          onFilterChange={(patch) => changeFilters("uploads", patch)}
+          onOpen={openDrawer}
         />
       );
     }
-    if (active === 'users') {
+    if (active === "users") {
       return (
         <UsersPage
           data={lists.users}
-          filters={sectionFilters('users')}
-          onFilterChange={(patch) => changeFilters('users', patch)}
-          onOpen={setDrawer}
+          filters={sectionFilters("users")}
+          onCreateUser={createUser}
+          onFilterChange={(patch) => changeFilters("users", patch)}
+          onOpen={openDrawer}
         />
       );
     }
-    if (active === 'health') {
+    if (active === "health") {
       return <HealthPage health={health} />;
     }
     return (
@@ -479,6 +576,18 @@ export function App() {
       />
     );
   }
+}
+
+function isUserScopedSection(section: Section) {
+  return [
+    "places",
+    "categories",
+    "schedules",
+    "activity",
+    "errors",
+    "requests",
+    "uploads",
+  ].includes(section);
 }
 
 function emptyList<T>(): ListResponse<T> {

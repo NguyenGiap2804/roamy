@@ -1,17 +1,27 @@
 import {
+  AuthProvider,
   ImageAssetStatus,
   ImageStorageKind,
   Prisma,
   ScheduleStatus,
   SystemEventSeverity,
-} from '@prisma/client';
+} from "@prisma/client";
+import bcrypt from "bcryptjs";
+import { randomBytes } from "crypto";
 
-import { prisma } from '../../config/db';
+import { prisma } from "../../config/db";
+import {
+  ConflictError,
+  NotFoundError,
+  ValidationError,
+} from "../../utils/errors";
+import type { AdminCreateUserInput } from "./admin.model";
 
 export type AdminListOptions = {
   q?: string;
   page?: number;
   limit?: number;
+  userId?: string;
   status?: string;
   type?: string;
   severity?: string;
@@ -31,6 +41,184 @@ export type AdminListResult<T> = {
 };
 
 export class AdminService {
+  async createUser(input: AdminCreateUserInput) {
+    const email = normalizeEmail(input.email);
+    const existing = await prisma.user.findUnique({ where: { email } });
+
+    if (existing) {
+      throw new ConflictError("Email đã tồn tại");
+    }
+
+    const temporaryPassword = generateTemporaryPassword();
+    const passwordHash = await bcrypt.hash(temporaryPassword, 12);
+    const now = new Date();
+
+    const user = await prisma.user.create({
+      data: {
+        email,
+        name: input.name.trim(),
+        passwordHash,
+        emailVerifiedAt: now,
+        accounts: {
+          create: {
+            provider: AuthProvider.PASSWORD,
+            providerAccountId: email,
+            email,
+          },
+        },
+      },
+      select: adminUserDetailSelect,
+    });
+
+    return { user, temporaryPassword };
+  }
+
+  async userSummary(id: string) {
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: adminUserDetailSelect,
+    });
+
+    if (!user) {
+      throw new NotFoundError("User not found");
+    }
+
+    const [places, categories, schedules, uploads, requests, errors, activity] =
+      await Promise.all([
+        prisma.place.findMany({
+          where: { userId: id },
+          take: 12,
+          orderBy: { createdAt: "desc" },
+          include: {
+            category: true,
+            schedules: true,
+            user: { select: adminUserSelect },
+          },
+        }),
+        prisma.category.findMany({
+          where: { userId: id },
+          take: 12,
+          orderBy: { createdAt: "asc" },
+          include: {
+            user: { select: adminUserSelect },
+            _count: { select: { places: true } },
+          },
+        }),
+        prisma.schedule.findMany({
+          where: { userId: id },
+          take: 12,
+          orderBy: [{ date: "desc" }, { time: "asc" }],
+          include: {
+            user: { select: adminUserSelect },
+            place: {
+              include: { category: true, user: { select: adminUserSelect } },
+            },
+          },
+        }),
+        prisma.imageAsset.findMany({
+          where: { userId: id },
+          take: 12,
+          orderBy: { createdAt: "desc" },
+          include: { user: { select: adminUserSelect } },
+        }),
+        prisma.apiRequestLog.findMany({
+          where: { userId: id },
+          take: 12,
+          orderBy: { createdAt: "desc" },
+          include: { user: { select: adminUserSelect } },
+        }),
+        prisma.apiErrorLog.findMany({
+          where: { userId: id },
+          take: 12,
+          orderBy: { createdAt: "desc" },
+          include: { user: { select: adminUserSelect } },
+        }),
+        prisma.systemEvent.findMany({
+          where: { userId: id },
+          take: 12,
+          orderBy: { createdAt: "desc" },
+          include: { user: { select: adminUserSelect } },
+        }),
+      ]);
+
+    return {
+      user,
+      places,
+      categories,
+      schedules,
+      uploads,
+      requests,
+      errors,
+      activity,
+    };
+  }
+
+  async deleteUser(id: string, confirmEmail: string) {
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, email: true },
+    });
+
+    if (!user) {
+      throw new NotFoundError("User not found");
+    }
+
+    if (normalizeEmail(confirmEmail) !== user.email) {
+      throw new ValidationError("Email xác nhận không khớp");
+    }
+
+    const deleted = await prisma.$transaction(async (tx) => {
+      const schedules = await tx.schedule.deleteMany({ where: { userId: id } });
+      const places = await tx.place.deleteMany({ where: { userId: id } });
+      const categories = await tx.category.deleteMany({
+        where: { userId: id },
+      });
+      const refreshTokens = await tx.refreshToken.deleteMany({
+        where: { userId: id },
+      });
+      const authAccounts = await tx.authAccount.deleteMany({
+        where: { userId: id },
+      });
+      const emailTokens = await tx.emailToken.deleteMany({
+        where: { userId: id },
+      });
+      const imageAssets = await tx.imageAsset.deleteMany({
+        where: { userId: id },
+      });
+      const apiRequestLogs = await tx.apiRequestLog.deleteMany({
+        where: { userId: id },
+      });
+      const apiErrorLogs = await tx.apiErrorLog.deleteMany({
+        where: { userId: id },
+      });
+      const systemEvents = await tx.systemEvent.deleteMany({
+        where: { userId: id },
+      });
+
+      await tx.user.delete({ where: { id } });
+
+      return {
+        schedules: schedules.count,
+        places: places.count,
+        categories: categories.count,
+        refreshTokens: refreshTokens.count,
+        authAccounts: authAccounts.count,
+        emailTokens: emailTokens.count,
+        imageAssets: imageAssets.count,
+        apiRequestLogs: apiRequestLogs.count,
+        apiErrorLogs: apiErrorLogs.count,
+        systemEvents: systemEvents.count,
+      };
+    });
+
+    return {
+      id: user.id,
+      email: user.email,
+      deleted: true,
+      deletedCounts: deleted,
+    };
+  }
+
   async overview() {
     const now = new Date();
     const today = new Date(now);
@@ -64,37 +252,37 @@ export class AdminService {
       }),
       prisma.imageAsset.count({ where: { createdAt: { gte: last24h } } }),
       prisma.imageAsset.count({
-        where: { createdAt: { gte: last24h }, status: 'SUCCESS' },
+        where: { createdAt: { gte: last24h }, status: "SUCCESS" },
       }),
       prisma.systemEvent.findMany({
         where: { createdAt: { gte: last24h }, deviceId: { not: null } },
-        distinct: ['deviceId'],
+        distinct: ["deviceId"],
         select: { deviceId: true },
       }),
       prisma.systemEvent.findMany({
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         take: 12,
         include: { user: { select: adminUserSelect } },
       }),
       prisma.apiErrorLog.findMany({
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         take: 8,
         include: { user: { select: adminUserSelect } },
       }),
       prisma.place.findMany({
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         take: 8,
         include: { category: true, user: { select: adminUserSelect } },
       }),
       prisma.apiRequestLog.findMany({
         where: { createdAt: { gte: last24h }, durationMs: { gte: 1000 } },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         take: 8,
         include: { user: { select: adminUserSelect } },
       }),
       prisma.imageAsset.findMany({
-        where: { createdAt: { gte: last24h }, status: 'FAILED' },
-        orderBy: { createdAt: 'desc' },
+        where: { createdAt: { gte: last24h }, status: "FAILED" },
+        orderBy: { createdAt: "desc" },
         take: 8,
         include: { user: { select: adminUserSelect } },
       }),
@@ -133,16 +321,16 @@ export class AdminService {
 
     return {
       backend: {
-        status: 'online',
+        status: "online",
         uptimeSeconds: Math.round(process.uptime()),
-        environment: process.env.NODE_ENV || 'development',
+        environment: process.env.NODE_ENV || "development",
       },
       database: {
-        status: 'online',
+        status: "online",
         latencyMs: databaseLatencyMs,
       },
       cloudinary: {
-        status: hasCloudinaryConfig() ? 'configured' : 'missing-config',
+        status: hasCloudinaryConfig() ? "configured" : "missing-config",
       },
       admin: {
         renderUrl: process.env.PUBLIC_BASE_URL || null,
@@ -158,11 +346,15 @@ export class AdminService {
     if (q) {
       and.push({
         OR: [
-          { name: { contains: q, mode: 'insensitive' } },
-          { address: { contains: q, mode: 'insensitive' } },
-          { category: { name: { contains: q, mode: 'insensitive' } } },
+          { name: { contains: q, mode: "insensitive" } },
+          { address: { contains: q, mode: "insensitive" } },
+          { category: { name: { contains: q, mode: "insensitive" } } },
         ],
       });
+    }
+
+    if (options.userId) {
+      and.push({ userId: options.userId });
     }
 
     if (options.categoryId) {
@@ -173,14 +365,14 @@ export class AdminService {
       and.push({ rating: { gte: options.minRating } });
     }
 
-    if (options.imageStatus === 'with-image') {
+    if (options.imageStatus === "with-image") {
       and.push({
-        AND: [{ imageUrl: { not: null } }, { imageUrl: { not: '' } }],
+        AND: [{ imageUrl: { not: null } }, { imageUrl: { not: "" } }],
       });
     }
 
-    if (options.imageStatus === 'without-image') {
-      and.push({ OR: [{ imageUrl: null }, { imageUrl: '' }] });
+    if (options.imageStatus === "without-image") {
+      and.push({ OR: [{ imageUrl: null }, { imageUrl: "" }] });
     }
 
     const createdAt = dateTimeFilter(options);
@@ -196,8 +388,12 @@ export class AdminService {
         where,
         skip,
         take,
-        orderBy: { createdAt: 'desc' },
-        include: { category: true, schedules: true, user: { select: adminUserSelect } },
+        orderBy: { createdAt: "desc" },
+        include: {
+          category: true,
+          schedules: true,
+          user: { select: adminUserSelect },
+        },
       }),
       page,
       limit,
@@ -209,8 +405,12 @@ export class AdminService {
     const and: Prisma.CategoryWhereInput[] = [];
     const q = normalizedQuery(options.q);
 
+    if (options.userId) {
+      and.push({ userId: options.userId });
+    }
+
     if (q) {
-      and.push({ name: { contains: q, mode: 'insensitive' } });
+      and.push({ name: { contains: q, mode: "insensitive" } });
     }
 
     const createdAt = dateTimeFilter(options);
@@ -226,7 +426,7 @@ export class AdminService {
         where,
         skip,
         take,
-        orderBy: { createdAt: 'asc' },
+        orderBy: { createdAt: "asc" },
         include: {
           user: { select: adminUserSelect },
           _count: { select: { places: true } },
@@ -242,11 +442,15 @@ export class AdminService {
     const and: Prisma.ScheduleWhereInput[] = [];
     const q = normalizedQuery(options.q);
 
+    if (options.userId) {
+      and.push({ userId: options.userId });
+    }
+
     if (q) {
       and.push({
         OR: [
-          { place: { name: { contains: q, mode: 'insensitive' } } },
-          { place: { address: { contains: q, mode: 'insensitive' } } },
+          { place: { name: { contains: q, mode: "insensitive" } } },
+          { place: { address: { contains: q, mode: "insensitive" } } },
         ],
       });
     }
@@ -268,10 +472,12 @@ export class AdminService {
         where,
         skip,
         take,
-        orderBy: [{ date: 'desc' }, { time: 'asc' }],
+        orderBy: [{ date: "desc" }, { time: "asc" }],
         include: {
           user: { select: adminUserSelect },
-          place: { include: { category: true, user: { select: adminUserSelect } } },
+          place: {
+            include: { category: true, user: { select: adminUserSelect } },
+          },
         },
       }),
       page,
@@ -284,6 +490,10 @@ export class AdminService {
     const and: Prisma.SystemEventWhereInput[] = [];
     const q = normalizedQuery(options.q);
 
+    if (options.userId) {
+      and.push({ userId: options.userId });
+    }
+
     if (options.type) {
       and.push({ type: options.type });
     }
@@ -295,10 +505,10 @@ export class AdminService {
     if (q) {
       and.push({
         OR: [
-          { type: { contains: q, mode: 'insensitive' } },
-          { action: { contains: q, mode: 'insensitive' } },
-          { message: { contains: q, mode: 'insensitive' } },
-          { deviceId: { contains: q, mode: 'insensitive' } },
+          { type: { contains: q, mode: "insensitive" } },
+          { action: { contains: q, mode: "insensitive" } },
+          { message: { contains: q, mode: "insensitive" } },
+          { deviceId: { contains: q, mode: "insensitive" } },
         ],
       });
     }
@@ -316,7 +526,7 @@ export class AdminService {
         where,
         skip,
         take,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: { user: { select: adminUserSelect } },
       }),
       page,
@@ -329,6 +539,10 @@ export class AdminService {
     const and: Prisma.ApiErrorLogWhereInput[] = [];
     const q = normalizedQuery(options.q);
 
+    if (options.userId) {
+      and.push({ userId: options.userId });
+    }
+
     if (options.status && Number.isFinite(Number(options.status))) {
       and.push({ statusCode: Number(options.status) });
     }
@@ -336,10 +550,10 @@ export class AdminService {
     if (q) {
       and.push({
         OR: [
-          { path: { contains: q, mode: 'insensitive' } },
-          { message: { contains: q, mode: 'insensitive' } },
-          { name: { contains: q, mode: 'insensitive' } },
-          { deviceId: { contains: q, mode: 'insensitive' } },
+          { path: { contains: q, mode: "insensitive" } },
+          { message: { contains: q, mode: "insensitive" } },
+          { name: { contains: q, mode: "insensitive" } },
+          { deviceId: { contains: q, mode: "insensitive" } },
         ],
       });
     }
@@ -357,7 +571,7 @@ export class AdminService {
         where,
         skip,
         take,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: { user: { select: adminUserSelect } },
       }),
       page,
@@ -370,6 +584,10 @@ export class AdminService {
     const and: Prisma.ApiRequestLogWhereInput[] = [];
     const q = normalizedQuery(options.q);
 
+    if (options.userId) {
+      and.push({ userId: options.userId });
+    }
+
     if (isResponseStatus(options.status)) {
       and.push({ responseStatus: options.status });
     }
@@ -377,9 +595,9 @@ export class AdminService {
     if (q) {
       and.push({
         OR: [
-          { path: { contains: q, mode: 'insensitive' } },
-          { method: { contains: q, mode: 'insensitive' } },
-          { deviceId: { contains: q, mode: 'insensitive' } },
+          { path: { contains: q, mode: "insensitive" } },
+          { method: { contains: q, mode: "insensitive" } },
+          { deviceId: { contains: q, mode: "insensitive" } },
         ],
       });
     }
@@ -397,7 +615,7 @@ export class AdminService {
         where,
         skip,
         take,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: { user: { select: adminUserSelect } },
       }),
       page,
@@ -411,6 +629,10 @@ export class AdminService {
     const q = normalizedQuery(options.q);
     const status = options.imageStatus ?? options.status;
 
+    if (options.userId) {
+      and.push({ userId: options.userId });
+    }
+
     if (isImageAssetStatus(status)) {
       and.push({ status });
     }
@@ -422,9 +644,9 @@ export class AdminService {
     if (q) {
       and.push({
         OR: [
-          { url: { contains: q, mode: 'insensitive' } },
-          { originalName: { contains: q, mode: 'insensitive' } },
-          { deviceId: { contains: q, mode: 'insensitive' } },
+          { url: { contains: q, mode: "insensitive" } },
+          { originalName: { contains: q, mode: "insensitive" } },
+          { deviceId: { contains: q, mode: "insensitive" } },
         ],
       });
     }
@@ -442,7 +664,7 @@ export class AdminService {
         where,
         skip,
         take,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: { user: { select: adminUserSelect } },
       }),
       page,
@@ -458,8 +680,8 @@ export class AdminService {
     if (q) {
       and.push({
         OR: [
-          { email: { contains: q, mode: 'insensitive' } },
-          { name: { contains: q, mode: 'insensitive' } },
+          { email: { contains: q, mode: "insensitive" } },
+          { name: { contains: q, mode: "insensitive" } },
         ],
       });
     }
@@ -477,22 +699,8 @@ export class AdminService {
         where,
         skip,
         take,
-        orderBy: { createdAt: 'desc' },
-        select: {
-          ...adminUserSelect,
-          avatarUrl: true,
-          emailVerifiedAt: true,
-          lastLoginAt: true,
-          createdAt: true,
-          accounts: { select: { provider: true, createdAt: true } },
-          _count: {
-            select: {
-              categories: true,
-              places: true,
-              schedules: true,
-            },
-          },
-        },
+        orderBy: { createdAt: "desc" },
+        select: adminUserDetailSelect,
       }),
       page,
       limit,
@@ -530,8 +738,8 @@ function normalizedQuery(value?: string) {
 }
 
 function dateTimeFilter(options: AdminListOptions) {
-  const gte = parseBoundaryDate(options.from, 'start');
-  const lte = parseBoundaryDate(options.to, 'end');
+  const gte = parseBoundaryDate(options.from, "start");
+  const lte = parseBoundaryDate(options.to, "end");
 
   if (!gte && !lte) {
     return undefined;
@@ -543,7 +751,10 @@ function dateTimeFilter(options: AdminListOptions) {
   };
 }
 
-function parseBoundaryDate(value: string | undefined, boundary: 'start' | 'end') {
+function parseBoundaryDate(
+  value: string | undefined,
+  boundary: "start" | "end",
+) {
   if (!value) {
     return undefined;
   }
@@ -555,22 +766,20 @@ function parseBoundaryDate(value: string | undefined, boundary: 'start' | 'end')
 
   const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(trimmed);
   const parsed = new Date(
-    isDateOnly && boundary === 'end'
+    isDateOnly && boundary === "end"
       ? `${trimmed}T23:59:59.999Z`
       : isDateOnly
-      ? `${trimmed}T00:00:00.000Z`
-      : trimmed,
+        ? `${trimmed}T00:00:00.000Z`
+        : trimmed,
   );
 
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
 }
 
-function isSystemEventSeverity(
-  value?: string,
-): value is SystemEventSeverity {
+function isSystemEventSeverity(value?: string): value is SystemEventSeverity {
   return Boolean(
     value &&
-      Object.values(SystemEventSeverity).includes(value as SystemEventSeverity),
+    Object.values(SystemEventSeverity).includes(value as SystemEventSeverity),
   );
 }
 
@@ -582,25 +791,27 @@ function isScheduleStatus(value?: string): value is ScheduleStatus {
 
 function isImageAssetStatus(value?: string): value is ImageAssetStatus {
   return Boolean(
-    value && Object.values(ImageAssetStatus).includes(value as ImageAssetStatus),
+    value &&
+    Object.values(ImageAssetStatus).includes(value as ImageAssetStatus),
   );
 }
 
 function isImageStorageKind(value?: string): value is ImageStorageKind {
   return Boolean(
-    value && Object.values(ImageStorageKind).includes(value as ImageStorageKind),
+    value &&
+    Object.values(ImageStorageKind).includes(value as ImageStorageKind),
   );
 }
 
-function isResponseStatus(value?: string): value is 'OK' | 'WARN' | 'ERROR' {
-  return value === 'OK' || value === 'WARN' || value === 'ERROR';
+function isResponseStatus(value?: string): value is "OK" | "WARN" | "ERROR" {
+  return value === "OK" || value === "WARN" || value === "ERROR";
 }
 
 function hasCloudinaryConfig() {
   return Boolean(
     process.env.CLOUDINARY_CLOUD_NAME &&
-      process.env.CLOUDINARY_API_KEY &&
-      process.env.CLOUDINARY_API_SECRET,
+    process.env.CLOUDINARY_API_KEY &&
+    process.env.CLOUDINARY_API_SECRET,
   );
 }
 
@@ -609,3 +820,28 @@ const adminUserSelect = {
   email: true,
   name: true,
 } as const;
+
+const adminUserDetailSelect = {
+  ...adminUserSelect,
+  avatarUrl: true,
+  emailVerifiedAt: true,
+  lastLoginAt: true,
+  createdAt: true,
+  accounts: { select: { provider: true, createdAt: true } },
+  _count: {
+    select: {
+      categories: true,
+      places: true,
+      schedules: true,
+    },
+  },
+} as const;
+
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function generateTemporaryPassword() {
+  const suffix = randomBytes(6).toString("base64url");
+  return `Roamy${suffix}9`;
+}

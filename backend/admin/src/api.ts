@@ -1,5 +1,7 @@
 import type {
   AdminSession,
+  AdminCreatedUser,
+  AdminUserDetail,
   AdminUser,
   ApiEnvelope,
   ApiErrorLog,
@@ -18,13 +20,13 @@ import type {
   Schedule,
   ScheduleUpdatePayload,
   SystemEvent,
-} from './types';
+} from "./types";
 
-const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+const baseUrl = import.meta.env.VITE_API_BASE_URL || "/api/v1";
 
 export class AuthExpiredError extends Error {
   constructor() {
-    super('Phiên đăng nhập đã hết hạn');
+    super("Phiên đăng nhập đã hết hạn");
   }
 }
 
@@ -32,18 +34,18 @@ export class AdminApi {
   constructor(private readonly token: string | null) {}
 
   login(email: string, password: string) {
-    return this.request<AdminSession>('/admin/auth/login', {
-      method: 'POST',
+    return this.request<AdminSession>("/admin/auth/login", {
+      method: "POST",
       body: JSON.stringify({ email, password }),
     });
   }
 
   overview() {
-    return this.request<Overview>('/admin/overview');
+    return this.request<Overview>("/admin/overview");
   }
 
   health() {
-    return this.request<Health>('/admin/health');
+    return this.request<Health>("/admin/health");
   }
 
   places(query: QueryOptions) {
@@ -92,62 +94,83 @@ export class AdminApi {
     );
   }
 
-  checkImages(query: Pick<QueryOptions, 'limit' | 'q'> = {}) {
+  createUser(payload: { name: string; email: string }) {
+    return this.request<AdminCreatedUser>("/admin/users", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  userSummary(id: string) {
+    return this.request<AdminUserDetail>(`/admin/users/${id}/summary`);
+  }
+
+  deleteUser(id: string, confirmEmail: string) {
+    return this.request<{ id: string; email: string; deleted: true }>(
+      `/admin/users/${id}`,
+      {
+        method: "DELETE",
+        body: JSON.stringify({ confirmEmail }),
+      },
+    );
+  }
+
+  checkImages(query: Pick<QueryOptions, "limit" | "q"> = {}) {
     return this.request<ImageHealthReport>(
       `/admin/images/check${toSearch(query)}`,
-      { method: 'POST' },
+      { method: "POST" },
     );
   }
 
   retentionPreview() {
     return this.request<RetentionPreview>(
-      '/admin/maintenance/retention/preview',
+      "/admin/maintenance/retention/preview",
     );
   }
 
   runRetention() {
     return this.request<RetentionRunResult>(
-      '/admin/maintenance/retention/run',
-      { method: 'POST' },
+      "/admin/maintenance/retention/run",
+      { method: "POST" },
     );
   }
 
   updatePlace(id: string, payload: PlaceUpdatePayload) {
     return this.request<Place>(`/admin/places/${id}`, {
-      method: 'PATCH',
+      method: "PATCH",
       body: JSON.stringify(payload),
     });
   }
 
   deletePlace(id: string) {
     return this.request<{ id: string }>(`/admin/places/${id}`, {
-      method: 'DELETE',
+      method: "DELETE",
     });
   }
 
   updateCategory(id: string, payload: CategoryUpdatePayload) {
     return this.request<Category>(`/admin/categories/${id}`, {
-      method: 'PATCH',
+      method: "PATCH",
       body: JSON.stringify(payload),
     });
   }
 
   deleteCategory(id: string) {
     return this.request<{ id: string }>(`/admin/categories/${id}`, {
-      method: 'DELETE',
+      method: "DELETE",
     });
   }
 
   updateSchedule(id: string, payload: ScheduleUpdatePayload) {
     return this.request<Schedule>(`/admin/schedules/${id}`, {
-      method: 'PATCH',
+      method: "PATCH",
       body: JSON.stringify(payload),
     });
   }
 
   deleteSchedule(id: string) {
     return this.request<{ id: string }>(`/admin/schedules/${id}`, {
-      method: 'DELETE',
+      method: "DELETE",
     });
   }
 
@@ -155,8 +178,8 @@ export class AdminApi {
     const response = await fetch(`${baseUrl}${path}`, {
       ...init,
       headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
+        Accept: "application/json",
+        "Content-Type": "application/json",
         ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
         ...init.headers,
       },
@@ -167,14 +190,14 @@ export class AdminApi {
     try {
       envelope = JSON.parse(text) as ApiEnvelope<T>;
     } catch {
-      throw new Error('Backend chưa trả về dữ liệu JSON hợp lệ');
+      throw new Error("Backend chưa trả về dữ liệu JSON hợp lệ");
     }
 
     if (!response.ok) {
       if (response.status === 401 && this.token) {
         throw new AuthExpiredError();
       }
-      throw new Error(envelope.message || 'Request failed');
+      throw new Error(envelope.message || "Request failed");
     }
 
     return envelope.data;
@@ -188,6 +211,7 @@ export type QueryOptions = {
   status?: string;
   type?: string;
   severity?: string;
+  userId?: string;
   categoryId?: string;
   imageStatus?: string;
   minRating?: string | number;
@@ -198,10 +222,10 @@ export type QueryOptions = {
 function toSearch(query: QueryOptions) {
   const params = new URLSearchParams();
   Object.entries(query).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && `${value}`.trim() !== '') {
+    if (value !== undefined && value !== null && `${value}`.trim() !== "") {
       params.set(key, `${value}`);
     }
   });
   const search = params.toString();
-  return search ? `?${search}` : '';
+  return search ? `?${search}` : "";
 }

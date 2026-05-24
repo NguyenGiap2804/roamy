@@ -3,12 +3,15 @@ import {
   ExternalLink,
   Image as ImageIcon,
   RefreshCw,
-} from 'lucide-react';
+} from "lucide-react";
+import { FormEvent, useState } from "react";
 
-import type { QueryOptions } from '../api';
+import type { QueryOptions } from "../api";
 import type {
   AdminSession,
+  AdminCreatedUser,
   AdminUser,
+  AdminUserDetail,
   ApiErrorLog,
   ApiRequestLog,
   Category,
@@ -22,7 +25,7 @@ import type {
   RetentionPreview,
   Schedule,
   SystemEvent,
-} from '../types';
+} from "../types";
 import {
   DataTable,
   EmptyState,
@@ -32,7 +35,7 @@ import {
   Panel,
   Rating,
   StatusPill,
-} from '../components/ui';
+} from "../components/ui";
 import {
   formatDate,
   formatTime,
@@ -42,17 +45,17 @@ import {
   toneForSeverity,
   toneForUpload,
   valueOrDash,
-} from '../utils';
+} from "../utils";
 
 export type DrawerState =
-  | { kind: 'place'; item: Place }
-  | { kind: 'category'; item: Category }
-  | { kind: 'schedule'; item: Schedule }
-  | { kind: 'user'; item: AdminUser }
-  | { kind: 'activity'; item: SystemEvent }
-  | { kind: 'error'; item: ApiErrorLog }
-  | { kind: 'request'; item: ApiRequestLog }
-  | { kind: 'upload'; item: ImageAsset };
+  | { kind: "place"; item: Place }
+  | { kind: "category"; item: Category }
+  | { kind: "schedule"; item: Schedule }
+  | { kind: "user"; item: AdminUser; detail?: AdminUserDetail | null }
+  | { kind: "activity"; item: SystemEvent }
+  | { kind: "error"; item: ApiErrorLog }
+  | { kind: "request"; item: ApiRequestLog }
+  | { kind: "upload"; item: ImageAsset };
 
 type ListFilters = QueryOptions & {
   page: number;
@@ -73,17 +76,19 @@ export function OverviewPage({
   const kpis = overview?.kpis;
   const attentionItems = [
     ...(overview?.attention?.cloudinaryMissing
-      ? ['Cloudinary chưa được cấu hình']
+      ? ["Cloudinary chưa được cấu hình"]
       : []),
-    ...((overview?.attention?.latestErrors ?? []).slice(0, 3).map(
-      (error) => `${error.statusCode} ${error.path}`,
-    )),
-    ...((overview?.attention?.slowRequests ?? []).slice(0, 3).map(
-      (request) => `${request.durationMs}ms ${request.path}`,
-    )),
-    ...((overview?.attention?.failedUploads ?? []).slice(0, 3).map(
-      (upload) => `Upload lỗi: ${upload.originalName ?? short(upload.url)}`,
-    )),
+    ...(overview?.attention?.latestErrors ?? [])
+      .slice(0, 3)
+      .map((error) => `${error.statusCode} ${error.path}`),
+    ...(overview?.attention?.slowRequests ?? [])
+      .slice(0, 3)
+      .map((request) => `${request.durationMs}ms ${request.path}`),
+    ...(overview?.attention?.failedUploads ?? [])
+      .slice(0, 3)
+      .map(
+        (upload) => `Upload lỗi: ${upload.originalName ?? short(upload.url)}`,
+      ),
   ];
 
   return (
@@ -92,10 +97,7 @@ export function OverviewPage({
         <Kpi label="Users" value={kpis?.totalUsers ?? 0} />
         <Kpi label="Địa điểm" value={kpis?.totalPlaces ?? 0} />
         <Kpi label="Lỗi hôm nay" value={kpis?.errorsToday ?? 0} tone="danger" />
-        <Kpi
-          label="Phản hồi TB"
-          value={`${kpis?.averageResponseMs ?? 0} ms`}
-        />
+        <Kpi label="Phản hồi TB" value={`${kpis?.averageResponseMs ?? 0} ms`} />
         <Kpi
           label="Upload ảnh"
           value={`${kpis?.uploadSuccessRate ?? 100}%`}
@@ -126,13 +128,13 @@ export function OverviewPage({
         <Panel title="Hoạt động mới" subtitle="12 event gần nhất" compact>
           <DataTable
             empty="Chưa có hoạt động được ghi nhận."
-            headers={['Loại', 'Hành động', 'Mức', 'Thời gian']}
+            headers={["Loại", "Hành động", "Mức", "Thời gian"]}
             rows={(overview?.latestActivity ?? []).map((event) => ({
               key: event.id,
-              onClick: () => onOpen({ kind: 'activity', item: event }),
+              onClick: () => onOpen({ kind: "activity", item: event }),
               cells: [
                 <strong>{event.type}</strong>,
-                event.action ?? '-',
+                event.action ?? "-",
                 <StatusPill
                   tone={toneForSeverity(event.severity)}
                   label={event.severity}
@@ -145,15 +147,15 @@ export function OverviewPage({
         <Panel title="Địa điểm mới" subtitle="8 bản ghi gần nhất" compact>
           <DataTable
             empty="Chưa có địa điểm."
-            headers={['Tên', 'Danh mục', 'Rating', 'Ảnh']}
+            headers={["Tên", "Danh mục", "Rating", "Ảnh"]}
             rows={(overview?.latestPlaces ?? []).map((place) => ({
               key: place.id,
-              onClick: () => onOpen({ kind: 'place', item: place }),
+              onClick: () => onOpen({ kind: "place", item: place }),
               cells: [
                 <strong>{place.name}</strong>,
-                place.category?.name ?? '-',
+                place.category?.name ?? "-",
                 <Rating value={place.rating} />,
-                place.imageUrl ? 'Có ảnh' : 'Thiếu ảnh',
+                place.imageUrl ? "Có ảnh" : "Thiếu ảnh",
               ],
             }))}
           />
@@ -180,7 +182,7 @@ export function PlacesPage({
     <Panel title="Địa điểm" subtitle={`${data.total} bản ghi`}>
       <FilterBar>
         <select
-          value={filters.categoryId ?? ''}
+          value={filters.categoryId ?? ""}
           onChange={(event) =>
             onFilterChange({ categoryId: event.target.value, page: 1 })
           }
@@ -193,7 +195,7 @@ export function PlacesPage({
           ))}
         </select>
         <select
-          value={filters.imageStatus ?? ''}
+          value={filters.imageStatus ?? ""}
           onChange={(event) =>
             onFilterChange({ imageStatus: event.target.value, page: 1 })
           }
@@ -203,7 +205,7 @@ export function PlacesPage({
           <option value="without-image">Thiếu ảnh</option>
         </select>
         <select
-          value={filters.minRating ?? ''}
+          value={filters.minRating ?? ""}
           onChange={(event) =>
             onFilterChange({ minRating: event.target.value, page: 1 })
           }
@@ -216,23 +218,26 @@ export function PlacesPage({
       </FilterBar>
       <DataTable
         empty="Chưa có địa điểm phù hợp."
-        headers={['Tên', 'Danh mục', 'Rating', 'Ảnh', 'Cập nhật']}
+        headers={["Tên", "Danh mục", "Rating", "Ảnh", "Cập nhật"]}
         rows={data.items.map((place) => ({
           key: place.id,
-          onClick: () => onOpen({ kind: 'place', item: place }),
+          onClick: () => onOpen({ kind: "place", item: place }),
           cells: [
             <strong>{place.name}</strong>,
-            place.category?.name ?? '-',
+            place.category?.name ?? "-",
             <Rating value={place.rating} />,
             <StatusPill
-              tone={place.imageUrl ? 'success' : 'muted'}
-              label={place.imageUrl ? 'Có ảnh' : 'Thiếu ảnh'}
+              tone={place.imageUrl ? "success" : "muted"}
+              label={place.imageUrl ? "Có ảnh" : "Thiếu ảnh"}
             />,
             formatTime(place.createdAt),
           ],
         }))}
       />
-      <Pagination data={data} onPageChange={(page) => onFilterChange({ page })} />
+      <Pagination
+        data={data}
+        onPageChange={(page) => onFilterChange({ page })}
+      />
     </Panel>
   );
 }
@@ -255,10 +260,10 @@ export function CategoriesPage({
       </FilterBar>
       <DataTable
         empty="Chưa có danh mục phù hợp."
-        headers={['Icon', 'Tên', 'Số địa điểm', 'Ngày tạo']}
+        headers={["Icon", "Tên", "Số địa điểm", "Ngày tạo"]}
         rows={data.items.map((category) => ({
           key: category.id,
-          onClick: () => onOpen({ kind: 'category', item: category }),
+          onClick: () => onOpen({ kind: "category", item: category }),
           cells: [
             category.icon,
             <strong>{category.name}</strong>,
@@ -267,7 +272,10 @@ export function CategoriesPage({
           ],
         }))}
       />
-      <Pagination data={data} onPageChange={(page) => onFilterChange({ page })} />
+      <Pagination
+        data={data}
+        onPageChange={(page) => onFilterChange({ page })}
+      />
     </Panel>
   );
 }
@@ -287,7 +295,7 @@ export function SchedulesPage({
     <Panel title="Lịch trình" subtitle={`${data.total} lịch`}>
       <FilterBar>
         <select
-          value={filters.status ?? ''}
+          value={filters.status ?? ""}
           onChange={(event) =>
             onFilterChange({ status: event.target.value, page: 1 })
           }
@@ -301,23 +309,26 @@ export function SchedulesPage({
       </FilterBar>
       <DataTable
         empty="Chưa có lịch trình phù hợp."
-        headers={['Địa điểm', 'Ngày', 'Giờ', 'Trạng thái', 'Nhắc nhở']}
+        headers={["Địa điểm", "Ngày", "Giờ", "Trạng thái", "Nhắc nhở"]}
         rows={data.items.map((schedule) => ({
           key: schedule.id,
-          onClick: () => onOpen({ kind: 'schedule', item: schedule }),
+          onClick: () => onOpen({ kind: "schedule", item: schedule }),
           cells: [
-            <strong>{schedule.place?.name ?? '-'}</strong>,
+            <strong>{schedule.place?.name ?? "-"}</strong>,
             formatDate(schedule.date),
             schedule.time,
             <StatusPill
               tone={toneForSchedule(schedule.status)}
               label={schedule.status}
             />,
-            schedule.hasReminder ? 'Có' : 'Không',
+            schedule.hasReminder ? "Có" : "Không",
           ],
         }))}
       />
-      <Pagination data={data} onPageChange={(page) => onFilterChange({ page })} />
+      <Pagination
+        data={data}
+        onPageChange={(page) => onFilterChange({ page })}
+      />
     </Panel>
   );
 }
@@ -337,14 +348,14 @@ export function ActivityPage({
     <Panel title="Hoạt động" subtitle={`${data.total} event`}>
       <FilterBar>
         <input
-          value={filters.type ?? ''}
+          value={filters.type ?? ""}
           onChange={(event) =>
             onFilterChange({ type: event.target.value, page: 1 })
           }
           placeholder="Loại event"
         />
         <select
-          value={filters.severity ?? ''}
+          value={filters.severity ?? ""}
           onChange={(event) =>
             onFilterChange({ severity: event.target.value, page: 1 })
           }
@@ -359,13 +370,13 @@ export function ActivityPage({
       </FilterBar>
       <DataTable
         empty="Chưa có hoạt động được ghi nhận."
-        headers={['Loại', 'Hành động', 'Thiết bị', 'Mức', 'Thời gian']}
+        headers={["Loại", "Hành động", "Thiết bị", "Mức", "Thời gian"]}
         rows={data.items.map((event) => ({
           key: event.id,
-          onClick: () => onOpen({ kind: 'activity', item: event }),
+          onClick: () => onOpen({ kind: "activity", item: event }),
           cells: [
             <strong>{event.type}</strong>,
-            event.action ?? '-',
+            event.action ?? "-",
             short(event.deviceId),
             <StatusPill
               tone={toneForSeverity(event.severity)}
@@ -375,7 +386,10 @@ export function ActivityPage({
           ],
         }))}
       />
-      <Pagination data={data} onPageChange={(page) => onFilterChange({ page })} />
+      <Pagination
+        data={data}
+        onPageChange={(page) => onFilterChange({ page })}
+      />
     </Panel>
   );
 }
@@ -395,7 +409,7 @@ export function ErrorsPage({
     <Panel title="Lỗi API" subtitle={`${data.total} lỗi`}>
       <FilterBar>
         <input
-          value={filters.status ?? ''}
+          value={filters.status ?? ""}
           onChange={(event) =>
             onFilterChange({ status: event.target.value, page: 1 })
           }
@@ -405,12 +419,14 @@ export function ErrorsPage({
       </FilterBar>
       <DataTable
         empty="Chưa có lỗi API trong bộ lọc hiện tại."
-        headers={['Endpoint', 'Status', 'Message', 'Thiết bị', 'Thời gian']}
+        headers={["Endpoint", "Status", "Message", "Thiết bị", "Thời gian"]}
         rows={data.items.map((error) => ({
           key: error.id,
-          onClick: () => onOpen({ kind: 'error', item: error }),
+          onClick: () => onOpen({ kind: "error", item: error }),
           cells: [
-            <code>{error.method} {error.path}</code>,
+            <code>
+              {error.method} {error.path}
+            </code>,
             <StatusPill tone="danger" label={`${error.statusCode}`} />,
             error.message,
             short(error.deviceId),
@@ -418,7 +434,10 @@ export function ErrorsPage({
           ],
         }))}
       />
-      <Pagination data={data} onPageChange={(page) => onFilterChange({ page })} />
+      <Pagination
+        data={data}
+        onPageChange={(page) => onFilterChange({ page })}
+      />
     </Panel>
   );
 }
@@ -438,7 +457,7 @@ export function RequestsPage({
     <Panel title="Request API" subtitle={`${data.total} request`}>
       <FilterBar>
         <select
-          value={filters.status ?? ''}
+          value={filters.status ?? ""}
           onChange={(event) =>
             onFilterChange({ status: event.target.value, page: 1 })
           }
@@ -452,12 +471,14 @@ export function RequestsPage({
       </FilterBar>
       <DataTable
         empty="Chưa có request phù hợp."
-        headers={['Endpoint', 'Status', 'Duration', 'Thiết bị', 'Thời gian']}
+        headers={["Endpoint", "Status", "Duration", "Thiết bị", "Thời gian"]}
         rows={data.items.map((request) => ({
           key: request.id,
-          onClick: () => onOpen({ kind: 'request', item: request }),
+          onClick: () => onOpen({ kind: "request", item: request }),
           cells: [
-            <code>{request.method} {request.path}</code>,
+            <code>
+              {request.method} {request.path}
+            </code>,
             <StatusPill
               tone={toneForResponse(request.responseStatus)}
               label={`${request.statusCode}`}
@@ -468,7 +489,10 @@ export function RequestsPage({
           ],
         }))}
       />
-      <Pagination data={data} onPageChange={(page) => onFilterChange({ page })} />
+      <Pagination
+        data={data}
+        onPageChange={(page) => onFilterChange({ page })}
+      />
     </Panel>
   );
 }
@@ -491,7 +515,7 @@ export function UploadsPage({
   onOpen: (drawer: DrawerState) => void;
 }) {
   const unhealthyImages =
-    imageHealthReport?.items.filter((item) => item.status !== 'OK') ?? [];
+    imageHealthReport?.items.filter((item) => item.status !== "OK") ?? [];
 
   return (
     <Panel
@@ -505,7 +529,7 @@ export function UploadsPage({
           type="button"
         >
           <RefreshCw size={16} />
-          {isCheckingImages ? 'Đang kiểm tra' : 'Kiểm tra ảnh'}
+          {isCheckingImages ? "Đang kiểm tra" : "Kiểm tra ảnh"}
         </button>
       }
     >
@@ -519,17 +543,17 @@ export function UploadsPage({
           </div>
           <DataTable
             empty="Không có ảnh hỏng hoặc thiếu trong lần kiểm tra này."
-            headers={['Địa điểm', 'Trạng thái', 'HTTP', 'Lỗi']}
+            headers={["Địa điểm", "Trạng thái", "HTTP", "Lỗi"]}
             rows={unhealthyImages.map((item) => ({
               key: item.placeId,
               cells: [
                 <strong>{item.name}</strong>,
                 <StatusPill
-                  tone={item.status === 'BROKEN' ? 'danger' : 'warn'}
+                  tone={item.status === "BROKEN" ? "danger" : "warn"}
                   label={item.status}
                 />,
-                item.statusCode ?? '-',
-                item.errorMessage ?? '-',
+                item.statusCode ?? "-",
+                item.errorMessage ?? "-",
               ],
             }))}
           />
@@ -537,7 +561,7 @@ export function UploadsPage({
       )}
       <FilterBar>
         <select
-          value={filters.imageStatus ?? ''}
+          value={filters.imageStatus ?? ""}
           onChange={(event) =>
             onFilterChange({ imageStatus: event.target.value, page: 1 })
           }
@@ -547,7 +571,7 @@ export function UploadsPage({
           <option value="FAILED">FAILED</option>
         </select>
         <select
-          value={filters.type ?? ''}
+          value={filters.type ?? ""}
           onChange={(event) =>
             onFilterChange({ type: event.target.value, page: 1 })
           }
@@ -561,10 +585,10 @@ export function UploadsPage({
       </FilterBar>
       <DataTable
         empty="Chưa có upload ảnh phù hợp."
-        headers={['File', 'Storage', 'Status', 'Dung lượng', 'Thời gian']}
+        headers={["File", "Storage", "Status", "Dung lượng", "Thời gian"]}
         rows={data.items.map((upload) => ({
           key: upload.id,
-          onClick: () => onOpen({ kind: 'upload', item: upload }),
+          onClick: () => onOpen({ kind: "upload", item: upload }),
           cells: [
             <span className="with-icon">
               <ImageIcon size={16} />
@@ -575,12 +599,17 @@ export function UploadsPage({
               tone={toneForUpload(upload.status)}
               label={upload.status}
             />,
-            upload.sizeBytes ? `${Math.round(upload.sizeBytes / 1024)} KB` : '-',
+            upload.sizeBytes
+              ? `${Math.round(upload.sizeBytes / 1024)} KB`
+              : "-",
             formatTime(upload.createdAt),
           ],
         }))}
       />
-      <Pagination data={data} onPageChange={(page) => onFilterChange({ page })} />
+      <Pagination
+        data={data}
+        onPageChange={(page) => onFilterChange({ page })}
+      />
     </Panel>
   );
 }
@@ -588,43 +617,146 @@ export function UploadsPage({
 export function UsersPage({
   data,
   filters,
+  onCreateUser,
   onFilterChange,
   onOpen,
 }: {
   data: ListResponse<AdminUser>;
   filters: ListFilters;
+  onCreateUser: (payload: {
+    name: string;
+    email: string;
+  }) => Promise<AdminCreatedUser>;
   onFilterChange: FilterChange;
   onOpen: (drawer: DrawerState) => void;
 }) {
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({ name: "", email: "" });
+  const [createdUser, setCreatedUser] = useState<AdminCreatedUser | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const result = await onCreateUser({
+        name: form.name.trim(),
+        email: form.email.trim(),
+      });
+      setCreatedUser(result);
+      setForm({ name: "", email: "" });
+      setShowCreate(false);
+    } catch (error) {
+      setCreateError(
+        error instanceof Error ? error.message : "Không tạo được user",
+      );
+    } finally {
+      setCreating(false);
+    }
+  }
+
   return (
-    <Panel title="Users" subtitle={`${data.total} user`}>
+    <Panel
+      title="Người dùng"
+      subtitle={`${data.total} tài khoản`}
+      actions={
+        <button
+          className="primary-button compact"
+          onClick={() => setShowCreate((value) => !value)}
+          type="button"
+        >
+          Tạo tài khoản
+        </button>
+      }
+    >
+      {showCreate && (
+        <form className="inline-form" onSubmit={submit}>
+          <input
+            value={form.name}
+            onChange={(event) => setForm({ ...form, name: event.target.value })}
+            placeholder="Tên hiển thị"
+            required
+          />
+          <input
+            value={form.email}
+            onChange={(event) =>
+              setForm({ ...form, email: event.target.value })
+            }
+            placeholder="Email đăng nhập"
+            required
+            type="email"
+          />
+          <button
+            className="primary-button compact"
+            disabled={creating}
+            type="submit"
+          >
+            {creating ? "Đang tạo" : "Tạo user"}
+          </button>
+        </form>
+      )}
+      {createError && <div className="error-banner inline">{createError}</div>}
+      {createdUser && (
+        <div className="password-result">
+          <div>
+            <strong>Đã tạo tài khoản {createdUser.user.email}</strong>
+            <span>Mật khẩu tạm chỉ hiển thị một lần.</span>
+          </div>
+          <code>{createdUser.temporaryPassword}</code>
+          <button
+            className="secondary-button compact"
+            onClick={() =>
+              void navigator.clipboard.writeText(createdUser.temporaryPassword)
+            }
+            type="button"
+          >
+            Copy mật khẩu
+          </button>
+          <button
+            className="icon-button small"
+            onClick={() => setCreatedUser(null)}
+            type="button"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <FilterBar>
         <DateRangeFilters filters={filters} onFilterChange={onFilterChange} />
       </FilterBar>
       <DataTable
-        empty="Chua co user phu hop."
+        empty="Chưa có user phù hợp."
         headers={[
-          'Email',
-          'Ten',
-          'Provider',
-          'Email',
-          'Du lieu',
-          'Lan dang nhap gan nhat',
+          "Email",
+          "Tên",
+          "Provider",
+          "Xác thực",
+          "Dữ liệu",
+          "Đăng nhập gần nhất",
         ]}
         rows={data.items.map((user) => ({
           key: user.id,
-          onClick: () => onOpen({ kind: 'user', item: user }),
+          onClick: () => onOpen({ kind: "user", item: user }),
           cells: [
             <strong>{user.email}</strong>,
             user.name,
-            user.accounts.map((account) => account.provider).join(', ') || '-',
-            user.emailVerifiedAt ? 'Verified' : 'Unverified',
-            `${user._count.places} places / ${user._count.schedules} schedules`,
-            user.lastLoginAt ? formatTime(user.lastLoginAt) : '-',
+            providerLabel(user),
+            user.emailVerifiedAt ? (
+              <StatusPill tone="success" label="Đã xác thực" />
+            ) : (
+              <StatusPill tone="warn" label="Chưa xác thực" />
+            ),
+            `${user._count.categories} danh mục / ${user._count.places} địa điểm / ${user._count.schedules} lịch`,
+            user.lastLoginAt ? formatTime(user.lastLoginAt) : "-",
           ],
         }))}
       />
-      <Pagination data={data} onPageChange={(page) => onFilterChange({ page })} />
+      <Pagination
+        data={data}
+        onPageChange={(page) => onFilterChange({ page })}
+      />
     </Panel>
   );
 }
@@ -639,20 +771,24 @@ export function HealthPage({
   return (
     <Panel
       title="Sức khỏe hệ thống"
-      subtitle={health?.backend.environment ?? 'Đang tải'}
+      subtitle={health?.backend.environment ?? "Đang tải"}
       compact={compact}
     >
       <div className="health-grid">
-        <HealthItem label="Backend" value={health?.backend.status ?? '-'} tone="success" />
+        <HealthItem
+          label="Backend"
+          value={health?.backend.status ?? "-"}
+          tone="success"
+        />
         <HealthItem
           label="Database"
-          value={`${health?.database.status ?? '-'} · ${health?.database.latencyMs ?? 0} ms`}
+          value={`${health?.database.status ?? "-"} · ${health?.database.latencyMs ?? 0} ms`}
           tone="success"
         />
         <HealthItem
           label="Cloudinary"
-          value={health?.cloudinary.status ?? '-'}
-          tone={health?.cloudinary.status === 'configured' ? 'success' : 'warn'}
+          value={health?.cloudinary.status ?? "-"}
+          tone={health?.cloudinary.status === "configured" ? "success" : "warn"}
         />
         <HealthItem
           label="Uptime"
@@ -689,9 +825,12 @@ export function SettingsPage({
     <Panel title="Cài đặt" subtitle="Phiên admin và cấu hình kết nối">
       <div className="settings-grid">
         <Setting label="Admin" value={session.admin.email} />
-        <Setting label="API base" value={import.meta.env.VITE_API_BASE_URL || '/api/v1'} />
-        <Setting label="Render URL" value={health?.admin.renderUrl ?? '-'} />
-        <Setting label="Cloudinary" value={health?.cloudinary.status ?? '-'} />
+        <Setting
+          label="API base"
+          value={import.meta.env.VITE_API_BASE_URL || "/api/v1"}
+        />
+        <Setting label="Render URL" value={health?.admin.renderUrl ?? "-"} />
+        <Setting label="Cloudinary" value={health?.cloudinary.status ?? "-"} />
       </div>
       <label className="toggle-line">
         <input
@@ -701,7 +840,11 @@ export function SettingsPage({
         />
         Auto-refresh mỗi 10 giây
       </label>
-      <button className="primary-button compact" onClick={onRefresh} type="button">
+      <button
+        className="primary-button compact"
+        onClick={onRefresh}
+        type="button"
+      >
         <RefreshCw size={17} />
         Tải lại dữ liệu
       </button>
@@ -718,7 +861,7 @@ export function SettingsPage({
             type="button"
           >
             <RefreshCw size={16} />
-            {retentionRunning ? 'Đang dọn' : 'Chạy dọn log'}
+            {retentionRunning ? "Đang dọn" : "Chạy dọn log"}
           </button>
         </div>
         <div className="settings-grid">
@@ -760,13 +903,17 @@ function DateRangeFilters({
     <>
       <input
         type="date"
-        value={filters.from ?? ''}
-        onChange={(event) => onFilterChange({ from: event.target.value, page: 1 })}
+        value={filters.from ?? ""}
+        onChange={(event) =>
+          onFilterChange({ from: event.target.value, page: 1 })
+        }
       />
       <input
         type="date"
-        value={filters.to ?? ''}
-        onChange={(event) => onFilterChange({ to: event.target.value, page: 1 })}
+        value={filters.to ?? ""}
+        onChange={(event) =>
+          onFilterChange({ to: event.target.value, page: 1 })
+        }
       />
     </>
   );
@@ -779,7 +926,7 @@ function HealthItem({
 }: {
   label: string;
   value: string;
-  tone: 'success' | 'warn' | 'danger' | 'muted';
+  tone: "success" | "warn" | "danger" | "muted";
 }) {
   return (
     <div className="health-item">
@@ -787,6 +934,13 @@ function HealthItem({
       <strong>{value}</strong>
     </div>
   );
+}
+
+function providerLabel(user: AdminUser) {
+  const providers = user.accounts.map((account) =>
+    account.provider === "PASSWORD" ? "Mật khẩu" : "Google",
+  );
+  return providers.length > 0 ? providers.join(", ") : "-";
 }
 
 function Setting({ label, value }: { label: string; value: string }) {
@@ -798,7 +952,7 @@ function Setting({ label, value }: { label: string; value: string }) {
   );
 }
 
-function sumRetention(counts: RetentionRunResult['deleted']) {
+function sumRetention(counts: RetentionRunResult["deleted"]) {
   return (
     counts.apiRequestLogs +
     counts.apiErrorLogs +
@@ -808,7 +962,7 @@ function sumRetention(counts: RetentionRunResult['deleted']) {
 }
 
 export function externalLink(url?: string | null) {
-  if (!url) return '-';
+  if (!url) return "-";
   return (
     <a href={url} rel="noreferrer" target="_blank">
       Mở <ExternalLink size={13} />

@@ -15,36 +15,36 @@ import {
   UploadCloud,
   Users,
   UserRound,
-} from 'lucide-react';
-import type { ReactNode } from 'react';
+} from "lucide-react";
+import type { ReactNode } from "react";
 
-import type { AdminSession, Health } from '../types';
+import type { AdminSession, AdminUser, Health } from "../types";
 
 export type Section =
-  | 'overview'
-  | 'places'
-  | 'categories'
-  | 'schedules'
-  | 'activity'
-  | 'errors'
-  | 'requests'
-  | 'uploads'
-  | 'users'
-  | 'health'
-  | 'settings';
+  | "overview"
+  | "places"
+  | "categories"
+  | "schedules"
+  | "activity"
+  | "errors"
+  | "requests"
+  | "uploads"
+  | "users"
+  | "health"
+  | "settings";
 
 const navItems: Array<{ id: Section; label: string; icon: ReactNode }> = [
-  { id: 'overview', label: 'Tổng quan', icon: <Gauge size={18} /> },
-  { id: 'places', label: 'Địa điểm', icon: <MapPin size={18} /> },
-  { id: 'categories', label: 'Danh mục', icon: <FolderTree size={18} /> },
-  { id: 'schedules', label: 'Lịch trình', icon: <CalendarDays size={18} /> },
-  { id: 'activity', label: 'Hoạt động', icon: <Activity size={18} /> },
-  { id: 'errors', label: 'Lỗi API', icon: <AlertTriangle size={18} /> },
-  { id: 'requests', label: 'Request API', icon: <Database size={18} /> },
-  { id: 'uploads', label: 'Upload ảnh', icon: <UploadCloud size={18} /> },
-  { id: 'users', label: 'Users', icon: <Users size={18} /> },
-  { id: 'health', label: 'Sức khỏe', icon: <HeartPulse size={18} /> },
-  { id: 'settings', label: 'Cài đặt', icon: <Settings size={18} /> },
+  { id: "overview", label: "Tổng quan", icon: <Gauge size={18} /> },
+  { id: "places", label: "Địa điểm", icon: <MapPin size={18} /> },
+  { id: "categories", label: "Danh mục", icon: <FolderTree size={18} /> },
+  { id: "schedules", label: "Lịch trình", icon: <CalendarDays size={18} /> },
+  { id: "activity", label: "Hoạt động", icon: <Activity size={18} /> },
+  { id: "errors", label: "Lỗi API", icon: <AlertTriangle size={18} /> },
+  { id: "requests", label: "Request API", icon: <Database size={18} /> },
+  { id: "uploads", label: "Upload ảnh", icon: <UploadCloud size={18} /> },
+  { id: "users", label: "Người dùng", icon: <Users size={18} /> },
+  { id: "health", label: "Sức khỏe", icon: <HeartPulse size={18} /> },
+  { id: "settings", label: "Cài đặt", icon: <Settings size={18} /> },
 ];
 
 export function AppShell({
@@ -52,9 +52,11 @@ export function AppShell({
   session,
   health,
   query,
+  selectedUser,
   autoRefreshEnabled,
   lastUpdatedAt,
   onActiveChange,
+  onClearSelectedUser,
   onQueryChange,
   onRefresh,
   onLogout,
@@ -64,9 +66,11 @@ export function AppShell({
   session: AdminSession;
   health: Health | null;
   query: string;
+  selectedUser: AdminUser | null;
   autoRefreshEnabled: boolean;
   lastUpdatedAt: Date | null;
   onActiveChange: (section: Section) => void;
+  onClearSelectedUser: () => void;
   onQueryChange: (value: string) => void;
   onRefresh: () => void;
   onLogout: () => void;
@@ -86,7 +90,7 @@ export function AppShell({
           {navItems.map((item) => (
             <button
               key={item.id}
-              className={active === item.id ? 'nav-item active' : 'nav-item'}
+              className={active === item.id ? "nav-item active" : "nav-item"}
               onClick={() => onActiveChange(item.id)}
               type="button"
             >
@@ -114,16 +118,28 @@ export function AppShell({
           <button className="icon-button" onClick={onRefresh} type="button">
             <RefreshCw size={18} />
           </button>
+          <button
+            className={selectedUser ? "user-scope active" : "user-scope"}
+            disabled={!selectedUser}
+            onClick={onClearSelectedUser}
+            title={
+              selectedUser ? "Bỏ lọc người dùng" : "Đang xem tất cả người dùng"
+            }
+            type="button"
+          >
+            <Users size={16} />
+            <span>{selectedUser ? selectedUser.email : "Tất cả user"}</span>
+          </button>
           <span className="env-badge">
-            {health?.backend.environment ?? 'Local'}
+            {health?.backend.environment ?? "Local"}
           </span>
-          <span className={autoRefreshEnabled ? 'sync-state on' : 'sync-state'}>
-            {autoRefreshEnabled ? 'Auto 10s' : 'Tạm dừng'}
+          <span className={autoRefreshEnabled ? "sync-state on" : "sync-state"}>
+            {autoRefreshEnabled ? "Auto 10s" : "Tạm dừng"}
           </span>
           <span className="sync-state">
             {lastUpdatedAt
-              ? `Cập nhật ${lastUpdatedAt.toLocaleTimeString('vi-VN')}`
-              : 'Chưa tải'}
+              ? `Cập nhật ${lastUpdatedAt.toLocaleTimeString("vi-VN")}`
+              : "Chưa tải"}
           </span>
           <div className="avatar">
             <UserRound size={17} />

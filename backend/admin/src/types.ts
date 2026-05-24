@@ -50,7 +50,7 @@ export type Schedule = {
   placeId: string;
   date: string;
   time: string;
-  status: 'UPCOMING' | 'DONE' | 'CANCELLED';
+  status: "UPCOMING" | "DONE" | "CANCELLED";
   hasReminder: boolean;
   createdAt: string;
   user?: UserSummary | null;
@@ -68,12 +68,28 @@ export type AdminUser = UserSummary & {
   emailVerifiedAt?: string | null;
   lastLoginAt?: string | null;
   createdAt: string;
-  accounts: Array<{ provider: 'PASSWORD' | 'GOOGLE'; createdAt: string }>;
+  accounts: Array<{ provider: "PASSWORD" | "GOOGLE"; createdAt: string }>;
   _count: {
     categories: number;
     places: number;
     schedules: number;
   };
+};
+
+export type AdminUserDetail = {
+  user: AdminUser;
+  places: Place[];
+  categories: Category[];
+  schedules: Schedule[];
+  uploads: ImageAsset[];
+  requests: ApiRequestLog[];
+  errors: ApiErrorLog[];
+  activity: SystemEvent[];
+};
+
+export type AdminCreatedUser = {
+  user: AdminUser;
+  temporaryPassword: string;
 };
 
 export type SystemEvent = {
@@ -84,7 +100,7 @@ export type SystemEvent = {
   resourceId?: string | null;
   screen?: string | null;
   message?: string | null;
-  severity: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
+  severity: "DEBUG" | "INFO" | "WARN" | "ERROR";
   deviceId?: string | null;
   user?: UserSummary | null;
   requestId?: string | null;
@@ -119,15 +135,15 @@ export type ApiRequestLog = {
   userAgent?: string | null;
   ipAddress?: string | null;
   query?: unknown;
-  responseStatus: 'OK' | 'WARN' | 'ERROR';
+  responseStatus: "OK" | "WARN" | "ERROR";
   createdAt: string;
 };
 
 export type ImageAsset = {
   id: string;
   url: string;
-  storage: 'CLOUDINARY' | 'LOCAL' | 'UNCONFIGURED';
-  status: 'SUCCESS' | 'FAILED';
+  storage: "CLOUDINARY" | "LOCAL" | "UNCONFIGURED";
+  status: "SUCCESS" | "FAILED";
   mimeType?: string | null;
   sizeBytes?: number | null;
   originalName?: string | null;
@@ -143,7 +159,7 @@ export type ImageHealthItem = {
   name: string;
   address: string;
   imageUrl?: string | null;
-  status: 'OK' | 'BROKEN' | 'MISSING';
+  status: "OK" | "BROKEN" | "MISSING";
   statusCode?: number;
   contentType?: string;
   errorMessage?: string;
@@ -257,6 +273,6 @@ export type ScheduleUpdatePayload = Partial<{
   placeId: string;
   date: string;
   time: string;
-  status: Schedule['status'];
+  status: Schedule["status"];
   hasReminder: boolean;
 }>;

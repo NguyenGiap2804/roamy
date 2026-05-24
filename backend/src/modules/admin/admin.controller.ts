@@ -1,82 +1,116 @@
-import { NextFunction, Request, Response } from 'express';
+import { NextFunction, Request, Response } from "express";
 
-import { adminImageHealthService } from './admin.image-health';
-import { loginAdmin } from './admin.auth';
-import { adminService, AdminListOptions } from './admin.service';
-import { categoryService } from '../category/category.service';
-import { retentionService } from '../maintenance/retention.service';
-import { observabilityService } from '../observability/observability.service';
-import { placeService } from '../place/place.service';
-import { scheduleService } from '../schedule/schedule.service';
-import { sendResponse } from '../../utils/response';
+import { adminImageHealthService } from "./admin.image-health";
+import { loginAdmin } from "./admin.auth";
+import { adminService, AdminListOptions } from "./admin.service";
+import { categoryService } from "../category/category.service";
+import { retentionService } from "../maintenance/retention.service";
+import { observabilityService } from "../observability/observability.service";
+import { placeService } from "../place/place.service";
+import { scheduleService } from "../schedule/schedule.service";
+import { sendResponse } from "../../utils/response";
 
 export class AdminController {
   login(req: Request, res: Response, next: NextFunction) {
     try {
       const result = loginAdmin(
-        String(req.body?.email ?? ''),
-        String(req.body?.password ?? ''),
+        String(req.body?.email ?? ""),
+        String(req.body?.password ?? ""),
         { ipAddress: req.ip || req.socket.remoteAddress },
       );
-      return sendResponse(res, 200, 'Admin logged in successfully', result);
+      return sendResponse(res, 200, "Admin logged in successfully", result);
     } catch (error) {
       return next(error);
     }
   }
 
-  overview = this.handle('Admin overview fetched successfully', () =>
+  overview = this.handle("Admin overview fetched successfully", () =>
     adminService.overview(),
   );
 
-  health = this.handle('Admin health fetched successfully', () =>
+  health = this.handle("Admin health fetched successfully", () =>
     adminService.health(),
   );
 
-  places = this.handle('Admin places fetched successfully', (req) =>
+  places = this.handle("Admin places fetched successfully", (req) =>
     adminService.listPlaces(listOptions(req)),
   );
 
-  categories = this.handle('Admin categories fetched successfully', (req) =>
+  categories = this.handle("Admin categories fetched successfully", (req) =>
     adminService.listCategories(listOptions(req)),
   );
 
-  schedules = this.handle('Admin schedules fetched successfully', (req) =>
+  schedules = this.handle("Admin schedules fetched successfully", (req) =>
     adminService.listSchedules(listOptions(req)),
   );
 
-  activity = this.handle('Admin activity fetched successfully', (req) =>
+  activity = this.handle("Admin activity fetched successfully", (req) =>
     adminService.listActivity(listOptions(req)),
   );
 
-  errors = this.handle('Admin errors fetched successfully', (req) =>
+  errors = this.handle("Admin errors fetched successfully", (req) =>
     adminService.listErrors(listOptions(req)),
   );
 
-  requests = this.handle('Admin requests fetched successfully', (req) =>
+  requests = this.handle("Admin requests fetched successfully", (req) =>
     adminService.listRequests(listOptions(req)),
   );
 
-  uploads = this.handle('Admin uploads fetched successfully', (req) =>
+  uploads = this.handle("Admin uploads fetched successfully", (req) =>
     adminService.listUploads(listOptions(req)),
   );
 
-  users = this.handle('Admin users fetched successfully', (req) =>
+  users = this.handle("Admin users fetched successfully", (req) =>
     adminService.listUsers(listOptions(req)),
   );
 
+  createUser = this.mutate("Admin user created successfully", async (req) => {
+    const result = await adminService.createUser(req.body);
+    await recordAdminEvent(req, {
+      action: "user.create",
+      resourceType: "user",
+      resourceId: result.user.id,
+      message: `Admin created user ${result.user.email}`,
+      metadata: { email: result.user.email },
+    });
+    return result;
+  });
+
+  userSummary = this.handle("Admin user summary fetched successfully", (req) =>
+    adminService.userSummary(req.params.id as string),
+  );
+
+  deleteUser = this.mutate("Admin user deleted successfully", async (req) => {
+    const result = await adminService.deleteUser(
+      req.params.id as string,
+      req.body.confirmEmail,
+    );
+    await recordAdminEvent(req, {
+      action: "user.delete",
+      resourceType: "user",
+      resourceId: result.id,
+      message: `Admin deleted user ${result.email}`,
+      metadata: {
+        email: result.email,
+        deletedCounts: result.deletedCounts,
+      },
+    });
+    return { id: result.id, email: result.email, deleted: true };
+  });
+
   retentionPreview = this.handle(
-    'Admin retention preview fetched successfully',
+    "Admin retention preview fetched successfully",
     () => retentionService.preview(),
   );
 
   runRetention = this.mutate(
-    'Admin retention cleanup finished successfully',
+    "Admin retention cleanup finished successfully",
     async (req) => {
       const result = await retentionService.run();
       await recordAdminEvent(req, {
-        action: 'maintenance.retention.run',
-        resourceType: 'maintenance',
-        message: 'Admin ran retention cleanup',
+        action: "maintenance.retention.run",
+        resourceType: "maintenance",
+        message: "Admin ran retention cleanup",
         metadata: { deleted: result.deleted, policy: result.policy },
       });
       return result;
@@ -84,16 +118,16 @@ export class AdminController {
   );
 
   checkImages = this.mutate(
-    'Admin image health check finished successfully',
+    "Admin image health check finished successfully",
     async (req) => {
       const result = await adminImageHealthService.check({
         limit: numberQuery(req.query.limit),
         q: stringQuery(req.query.q),
       });
       await recordAdminEvent(req, {
-        action: 'image.health.check',
-        resourceType: 'image',
-        message: 'Admin checked place image health',
+        action: "image.health.check",
+        resourceType: "image",
+        message: "Admin checked place image health",
         metadata: {
           total: result.total,
           ok: result.ok,
@@ -105,11 +139,11 @@ export class AdminController {
     },
   );
 
-  updatePlace = this.mutate('Admin place updated successfully', async (req) => {
+  updatePlace = this.mutate("Admin place updated successfully", async (req) => {
     const place = await placeService.update(req.params.id as string, req.body);
     await recordAdminEvent(req, {
-      action: 'place.update',
-      resourceType: 'place',
+      action: "place.update",
+      resourceType: "place",
       resourceId: place.id,
       message: `Admin updated place ${place.name}`,
       changedFields: Object.keys(req.body ?? {}),
@@ -117,11 +151,11 @@ export class AdminController {
     return place;
   });
 
-  deletePlace = this.mutate('Admin place deleted successfully', async (req) => {
+  deletePlace = this.mutate("Admin place deleted successfully", async (req) => {
     const deleted = await placeService.delete(req.params.id as string);
     await recordAdminEvent(req, {
-      action: 'place.delete',
-      resourceType: 'place',
+      action: "place.delete",
+      resourceType: "place",
       resourceId: deleted.id,
       message: `Admin deleted place ${deleted.id}`,
     });
@@ -129,15 +163,15 @@ export class AdminController {
   });
 
   updateCategory = this.mutate(
-    'Admin category updated successfully',
+    "Admin category updated successfully",
     async (req) => {
       const category = await categoryService.update(
         req.params.id as string,
         req.body,
       );
       await recordAdminEvent(req, {
-        action: 'category.update',
-        resourceType: 'category',
+        action: "category.update",
+        resourceType: "category",
         resourceId: category.id,
         message: `Admin updated category ${category.name}`,
         changedFields: Object.keys(req.body ?? {}),
@@ -147,12 +181,12 @@ export class AdminController {
   );
 
   deleteCategory = this.mutate(
-    'Admin category deleted successfully',
+    "Admin category deleted successfully",
     async (req) => {
       const deleted = await categoryService.delete(req.params.id as string);
       await recordAdminEvent(req, {
-        action: 'category.delete',
-        resourceType: 'category',
+        action: "category.delete",
+        resourceType: "category",
         resourceId: deleted.id,
         message: `Admin deleted category ${deleted.id}`,
       });
@@ -161,15 +195,15 @@ export class AdminController {
   );
 
   updateSchedule = this.mutate(
-    'Admin schedule updated successfully',
+    "Admin schedule updated successfully",
     async (req) => {
       const schedule = await scheduleService.update(
         req.params.id as string,
         req.body,
       );
       await recordAdminEvent(req, {
-        action: 'schedule.update',
-        resourceType: 'schedule',
+        action: "schedule.update",
+        resourceType: "schedule",
         resourceId: schedule.id,
         message: `Admin updated schedule ${schedule.id}`,
         changedFields: Object.keys(req.body ?? {}),
@@ -179,12 +213,12 @@ export class AdminController {
   );
 
   deleteSchedule = this.mutate(
-    'Admin schedule deleted successfully',
+    "Admin schedule deleted successfully",
     async (req) => {
       const deleted = await scheduleService.delete(req.params.id as string);
       await recordAdminEvent(req, {
-        action: 'schedule.delete',
-        resourceType: 'schedule',
+        action: "schedule.delete",
+        resourceType: "schedule",
         resourceId: deleted.id,
         message: `Admin deleted schedule ${deleted.id}`,
       });
@@ -192,10 +226,7 @@ export class AdminController {
     },
   );
 
-  private handle<T>(
-    message: string,
-    load: (req: Request) => Promise<T>,
-  ) {
+  private handle<T>(message: string, load: (req: Request) => Promise<T>) {
     return async (req: Request, res: Response, next: NextFunction) => {
       try {
         const data = await load(req);
@@ -206,10 +237,7 @@ export class AdminController {
     };
   }
 
-  private mutate<T>(
-    message: string,
-    operation: (req: Request) => Promise<T>,
-  ) {
+  private mutate<T>(message: string, operation: (req: Request) => Promise<T>) {
     return async (req: Request, res: Response, next: NextFunction) => {
       try {
         const data = await operation(req);
@@ -231,6 +259,7 @@ function listOptions(req: Request): AdminListOptions {
     status: stringQuery(req.query.status),
     type: stringQuery(req.query.type),
     severity: stringQuery(req.query.severity),
+    userId: stringQuery(req.query.userId),
     categoryId: stringQuery(req.query.categoryId),
     imageStatus: stringQuery(req.query.imageStatus),
     minRating: numberQuery(req.query.minRating),
@@ -251,7 +280,7 @@ async function recordAdminEvent(
   },
 ) {
   await observabilityService.recordSystemEvent({
-    type: 'admin',
+    type: "admin",
     action: input.action,
     resourceType: input.resourceType,
     resourceId: input.resourceId ?? null,
@@ -266,11 +295,11 @@ async function recordAdminEvent(
 }
 
 function stringQuery(value: unknown) {
-  return typeof value === 'string' ? value : undefined;
+  return typeof value === "string" ? value : undefined;
 }
 
 function numberQuery(value: unknown) {
-  if (typeof value !== 'string') {
+  if (typeof value !== "string") {
     return undefined;
   }
 
