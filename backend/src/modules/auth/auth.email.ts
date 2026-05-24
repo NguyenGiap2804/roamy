@@ -28,31 +28,96 @@ export async function sendAuthEmail(input: AuthEmailInput) {
 
   setDefaultResultOrder('ipv4first');
 
-  const transportOptions = {
-    host,
-    port,
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: { user, pass },
-    family: 4,
-    connectionTimeout: timeoutMs,
-    greetingTimeout: timeoutMs,
-    socketTimeout: timeoutMs,
-  } as SMTPTransport.Options & { family: number };
-
-  const transporter = nodemailer.createTransport(transportOptions);
-
   try {
-    await transporter.sendMail({
+    await sendMailWithOptions(
+      buildTransportOptions({
+        host,
+        port,
+        secure: process.env.SMTP_SECURE === 'true',
+        user,
+        pass,
+        timeoutMs,
+      }),
+      input,
       from,
-      to: input.to,
-      subject: input.subject,
-      text: input.text,
-    });
+    );
   } catch (error) {
-    throw new AppError(502, 'Could not send auth email. Please try again later.', {
-      cause: sanitizeEmailError(error),
-    });
+    if (shouldFallbackToGmailStartTls(error, host, port)) {
+      try {
+        await sendMailWithOptions(
+          buildTransportOptions({
+            host,
+            port: 587,
+            secure: false,
+            user,
+            pass,
+            timeoutMs,
+          }),
+          input,
+          from,
+        );
+        return;
+      } catch (fallbackError) {
+        throw emailDeliveryError(fallbackError);
+      }
+    }
+
+    throw emailDeliveryError(error);
   }
+}
+
+async function sendMailWithOptions(
+  options: SMTPTransport.Options & { family: number },
+  input: AuthEmailInput,
+  from: string,
+) {
+  const transporter = nodemailer.createTransport(options);
+  await transporter.sendMail({
+    from,
+    to: input.to,
+    subject: input.subject,
+    text: input.text,
+  });
+}
+
+function buildTransportOptions(input: {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  pass: string;
+  timeoutMs: number;
+}) {
+  return {
+    host: input.host,
+    port: input.port,
+    secure: input.secure,
+    requireTLS: !input.secure,
+    auth: { user: input.user, pass: input.pass },
+    family: 4,
+    connectionTimeout: input.timeoutMs,
+    greetingTimeout: input.timeoutMs,
+    socketTimeout: input.timeoutMs,
+  } as SMTPTransport.Options & { family: number };
+}
+
+function shouldFallbackToGmailStartTls(
+  error: unknown,
+  host: string,
+  port: number,
+) {
+  if (!host.toLowerCase().includes('gmail.com') || port !== 465) {
+    return false;
+  }
+
+  const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : null;
+  return code === 'ETIMEDOUT' || code === 'ESOCKET' || code === 'ENETUNREACH';
+}
+
+function emailDeliveryError(error: unknown) {
+  return new AppError(502, 'Could not send auth email. Please try again later.', {
+    cause: sanitizeEmailError(error),
+  });
 }
 
 function sanitizeEmailError(error: unknown) {
