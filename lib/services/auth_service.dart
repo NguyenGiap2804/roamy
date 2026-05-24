@@ -119,17 +119,21 @@ class AuthService {
   }
 
   Future<AuthSession> loginWithGoogle() async {
-    await _ensureGoogleInitialized();
-    if (!_googleSignIn.supportsAuthenticate()) {
-      throw const ApiException('Google sign-in is not supported here.');
-    }
+    try {
+      await _ensureGoogleInitialized();
+      if (!_googleSignIn.supportsAuthenticate()) {
+        throw const ApiException('Google sign-in is not supported here.');
+      }
 
-    final account = await _googleSignIn.authenticate();
-    final idToken = account.authentication.idToken;
-    if (idToken == null || idToken.isEmpty) {
-      throw const ApiException('Google did not return an ID token.');
+      final account = await _googleSignIn.authenticate();
+      final idToken = account.authentication.idToken;
+      if (idToken == null || idToken.isEmpty) {
+        throw const ApiException('Google did not return an ID token.');
+      }
+      return _postSession(ApiEndpoints.authGoogle, {'idToken': idToken});
+    } on GoogleSignInException catch (error) {
+      throw ApiException(_googleSignInMessage(error));
     }
-    return _postSession(ApiEndpoints.authGoogle, {'idToken': idToken});
   }
 
   Future<AuthSession> _postSession(
@@ -227,5 +231,21 @@ class AuthService {
       serverClientId: serverClientId.isEmpty ? null : serverClientId,
     );
     _googleInitialized = true;
+  }
+
+  String _googleSignInMessage(GoogleSignInException error) {
+    return switch (error.code) {
+      GoogleSignInExceptionCode.canceled =>
+        'Khong the dang nhap Google. Neu ban khong huy thao tac, hay kiem tra Android OAuth client package/SHA-1 roi thu lai.',
+      GoogleSignInExceptionCode.interrupted =>
+        'Dang nhap Google bi gian doan. Vui long thu lai.',
+      GoogleSignInExceptionCode.clientConfigurationError =>
+        'Cau hinh Google Sign-In chua dung. Kiem tra Web client id va Android OAuth client.',
+      GoogleSignInExceptionCode.providerConfigurationError =>
+        'Google Sign-In chua duoc cau hinh dung tren thiet bi nay.',
+      GoogleSignInExceptionCode.uiUnavailable =>
+        'Thiet bi nay khong mo duoc giao dien dang nhap Google.',
+      _ => 'Khong the dang nhap Google. Vui long thu lai.',
+    };
   }
 }
