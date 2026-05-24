@@ -38,16 +38,15 @@ class AuthService {
     );
   }
 
-  Future<AuthUser> register({
+  Future<AuthSession> register({
     required String name,
     required String email,
     required String password,
-  }) async {
-    final data = await _post(
+  }) {
+    return _postSession(
       ApiEndpoints.authRegister,
       {'name': name, 'email': email, 'password': password},
     );
-    return AuthUser.fromJson(data['user'] as Map<String, dynamic>);
   }
 
   Future<AuthSession> verifyEmail({

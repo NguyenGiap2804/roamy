@@ -59,13 +59,13 @@ class AuthProvider extends ChangeNotifier {
     required String password,
   }) async {
     await _runBusy(() async {
-      final user = await _authService.register(
+      final session = await _authService.register(
         name: name,
         email: email,
         password: password,
       );
-      _pendingVerificationEmail = user.email;
-      _user = user;
+      await _applySession(session);
+      _pendingVerificationEmail = null;
     });
   }
 

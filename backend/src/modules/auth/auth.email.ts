@@ -1,4 +1,4 @@
-import { setDefaultResultOrder } from 'dns';
+import { promises as dns, setDefaultResultOrder } from 'dns';
 import nodemailer from 'nodemailer';
 import SMTPTransport from 'nodemailer/lib/smtp-transport';
 
@@ -27,11 +27,13 @@ export async function sendAuthEmail(input: AuthEmailInput) {
   }
 
   setDefaultResultOrder('ipv4first');
+  const transportHost = await resolveTransportHost(host);
 
   try {
     await sendMailWithOptions(
       buildTransportOptions({
         host,
+        transportHost,
         port,
         secure: process.env.SMTP_SECURE === 'true',
         user,
@@ -47,6 +49,7 @@ export async function sendAuthEmail(input: AuthEmailInput) {
         await sendMailWithOptions(
           buildTransportOptions({
             host,
+            transportHost,
             port: 587,
             secure: false,
             user,
@@ -82,6 +85,7 @@ async function sendMailWithOptions(
 
 function buildTransportOptions(input: {
   host: string;
+  transportHost: string;
   port: number;
   secure: boolean;
   user: string;
@@ -89,16 +93,28 @@ function buildTransportOptions(input: {
   timeoutMs: number;
 }) {
   return {
-    host: input.host,
+    host: input.transportHost,
     port: input.port,
     secure: input.secure,
     requireTLS: !input.secure,
     auth: { user: input.user, pass: input.pass },
+    tls: {
+      servername: input.host,
+    },
     family: 4,
     connectionTimeout: input.timeoutMs,
     greetingTimeout: input.timeoutMs,
     socketTimeout: input.timeoutMs,
   } as SMTPTransport.Options & { family: number };
+}
+
+async function resolveTransportHost(host: string) {
+  try {
+    const addresses = await dns.resolve4(host);
+    return addresses[0] ?? host;
+  } catch {
+    return host;
+  }
 }
 
 function shouldFallbackToGmailStartTls(

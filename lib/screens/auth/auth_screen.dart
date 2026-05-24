@@ -225,8 +225,6 @@ class _AuthScreenState extends State<AuthScreen> {
             email: email,
             password: _passwordController.text,
           );
-          _changeMode(_AuthMode.verify);
-          setState(() => _notice = 'Da gui ma xac thuc ve email.');
         case _AuthMode.verify:
           await auth.verifyEmail(email, _codeController.text.trim());
         case _AuthMode.forgot:

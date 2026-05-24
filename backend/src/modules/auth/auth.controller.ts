@@ -10,8 +10,8 @@ export class AuthController {
       return sendResponse(
         res,
         201,
-        'Registration started successfully',
-        await authService.register(req.body),
+        'Registered successfully',
+        await authService.register(req.body, authContext(req)),
       );
     } catch (error) {
       return next(error);

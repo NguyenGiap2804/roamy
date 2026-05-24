@@ -30,7 +30,7 @@ const emailTokenTtlMs = 15 * 60 * 1000;
 const maxEmailTokenAttempts = 5;
 
 export class AuthService {
-  async register(input: RegisterInput) {
+  async register(input: RegisterInput, context: AuthContext) {
     const email = normalizeEmail(input.email);
     const passwordHash = await bcrypt.hash(input.password, 12);
     const existing = await prisma.user.findUnique({ where: { email } });
@@ -45,6 +45,8 @@ export class AuthService {
           data: {
             name: existing.name || input.name,
             passwordHash,
+            emailVerifiedAt: existing.emailVerifiedAt ?? new Date(),
+            lastLoginAt: new Date(),
             accounts: {
               upsert: {
                 where: {
@@ -68,6 +70,8 @@ export class AuthService {
             email,
             name: input.name,
             passwordHash,
+            emailVerifiedAt: new Date(),
+            lastLoginAt: new Date(),
             accounts: {
               create: {
                 provider: AuthProvider.PASSWORD,
@@ -78,11 +82,7 @@ export class AuthService {
           },
         });
 
-    await this.sendVerificationCode(user);
-    return {
-      user: serializeUser(user),
-      emailVerificationRequired: true,
-    };
+    return this.createSession(user, context);
   }
 
   async login(input: LoginInput, context: AuthContext) {
