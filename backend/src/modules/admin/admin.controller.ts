@@ -1,8 +1,10 @@
 import { NextFunction, Request, Response } from 'express';
 
+import { adminImageHealthService } from './admin.image-health';
 import { loginAdmin } from './admin.auth';
 import { adminService, AdminListOptions } from './admin.service';
 import { categoryService } from '../category/category.service';
+import { retentionService } from '../maintenance/retention.service';
 import { observabilityService } from '../observability/observability.service';
 import { placeService } from '../place/place.service';
 import { scheduleService } from '../schedule/schedule.service';
@@ -14,6 +16,7 @@ export class AdminController {
       const result = loginAdmin(
         String(req.body?.email ?? ''),
         String(req.body?.password ?? ''),
+        { ipAddress: req.ip || req.socket.remoteAddress },
       );
       return sendResponse(res, 200, 'Admin logged in successfully', result);
     } catch (error) {
@@ -55,6 +58,47 @@ export class AdminController {
 
   uploads = this.handle('Admin uploads fetched successfully', (req) =>
     adminService.listUploads(listOptions(req)),
+  );
+
+  retentionPreview = this.handle(
+    'Admin retention preview fetched successfully',
+    () => retentionService.preview(),
+  );
+
+  runRetention = this.mutate(
+    'Admin retention cleanup finished successfully',
+    async (req) => {
+      const result = await retentionService.run();
+      await recordAdminEvent(req, {
+        action: 'maintenance.retention.run',
+        resourceType: 'maintenance',
+        message: 'Admin ran retention cleanup',
+        metadata: { deleted: result.deleted, policy: result.policy },
+      });
+      return result;
+    },
+  );
+
+  checkImages = this.mutate(
+    'Admin image health check finished successfully',
+    async (req) => {
+      const result = await adminImageHealthService.check({
+        limit: numberQuery(req.query.limit),
+        q: stringQuery(req.query.q),
+      });
+      await recordAdminEvent(req, {
+        action: 'image.health.check',
+        resourceType: 'image',
+        message: 'Admin checked place image health',
+        metadata: {
+          total: result.total,
+          ok: result.ok,
+          broken: result.broken,
+          missing: result.missing,
+        },
+      });
+      return result;
+    },
   );
 
   updatePlace = this.mutate('Admin place updated successfully', async (req) => {
@@ -196,22 +240,24 @@ async function recordAdminEvent(
   input: {
     action: string;
     resourceType: string;
-    resourceId: string;
+    resourceId?: string;
     message: string;
     changedFields?: string[];
+    metadata?: Record<string, unknown>;
   },
 ) {
   await observabilityService.recordSystemEvent({
     type: 'admin',
     action: input.action,
     resourceType: input.resourceType,
-    resourceId: input.resourceId,
+    resourceId: input.resourceId ?? null,
     message: input.message,
     deviceId: req.deviceId,
     requestId: req.requestId,
-    metadata: input.changedFields
-      ? { changedFields: input.changedFields }
-      : undefined,
+    metadata: {
+      ...(input.metadata ?? {}),
+      ...(input.changedFields ? { changedFields: input.changedFields } : {}),
+    },
   });
 }
 

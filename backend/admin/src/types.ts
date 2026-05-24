@@ -109,6 +109,51 @@ export type ImageAsset = {
   createdAt: string;
 };
 
+export type ImageHealthItem = {
+  placeId: string;
+  name: string;
+  address: string;
+  imageUrl?: string | null;
+  status: 'OK' | 'BROKEN' | 'MISSING';
+  statusCode?: number;
+  contentType?: string;
+  errorMessage?: string;
+  checkedAt: string;
+};
+
+export type ImageHealthReport = {
+  total: number;
+  ok: number;
+  broken: number;
+  missing: number;
+  checkedAt: string;
+  items: ImageHealthItem[];
+};
+
+export type RetentionPolicy = {
+  requestLogDays: number;
+  errorLogDays: number;
+  systemEventDays: number;
+  imageAssetDays: number;
+};
+
+export type RetentionCounts = {
+  apiRequestLogs: number;
+  apiErrorLogs: number;
+  systemEvents: number;
+  imageAssets: number;
+};
+
+export type RetentionPreview = {
+  policy: RetentionPolicy;
+  cutoffs: Record<keyof RetentionCounts, string>;
+  counts: RetentionCounts;
+};
+
+export type RetentionRunResult = RetentionPreview & {
+  deleted: RetentionCounts;
+};
+
 export type ListResponse<T> = {
   total: number;
   page: number;

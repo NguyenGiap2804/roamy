@@ -7,10 +7,13 @@ import type {
   CategoryUpdatePayload,
   Health,
   ImageAsset,
+  ImageHealthReport,
   ListResponse,
   Overview,
   Place,
   PlaceUpdatePayload,
+  RetentionPreview,
+  RetentionRunResult,
   Schedule,
   ScheduleUpdatePayload,
   SystemEvent,
@@ -79,6 +82,26 @@ export class AdminApi {
   uploads(query: QueryOptions) {
     return this.request<ListResponse<ImageAsset>>(
       `/admin/uploads${toSearch(query)}`,
+    );
+  }
+
+  checkImages(query: Pick<QueryOptions, 'limit' | 'q'> = {}) {
+    return this.request<ImageHealthReport>(
+      `/admin/images/check${toSearch(query)}`,
+      { method: 'POST' },
+    );
+  }
+
+  retentionPreview() {
+    return this.request<RetentionPreview>(
+      '/admin/maintenance/retention/preview',
+    );
+  }
+
+  runRetention() {
+    return this.request<RetentionRunResult>(
+      '/admin/maintenance/retention/run',
+      { method: 'POST' },
     );
   }
 

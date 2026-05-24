@@ -13,9 +13,12 @@ import type {
   Category,
   Health,
   ImageAsset,
+  ImageHealthReport,
   ListResponse,
   Overview,
   Place,
+  RetentionRunResult,
+  RetentionPreview,
   Schedule,
   SystemEvent,
 } from '../types';
@@ -470,16 +473,65 @@ export function RequestsPage({
 export function UploadsPage({
   data,
   filters,
+  imageHealthReport,
+  isCheckingImages,
+  onCheckImages,
   onFilterChange,
   onOpen,
 }: {
   data: ListResponse<ImageAsset>;
   filters: ListFilters;
+  imageHealthReport: ImageHealthReport | null;
+  isCheckingImages: boolean;
+  onCheckImages: () => void;
   onFilterChange: FilterChange;
   onOpen: (drawer: DrawerState) => void;
 }) {
+  const unhealthyImages =
+    imageHealthReport?.items.filter((item) => item.status !== 'OK') ?? [];
+
   return (
-    <Panel title="Upload ảnh" subtitle={`${data.total} ảnh`}>
+    <Panel
+      title="Upload ảnh"
+      subtitle={`${data.total} ảnh`}
+      actions={
+        <button
+          className="secondary-button"
+          disabled={isCheckingImages}
+          onClick={onCheckImages}
+          type="button"
+        >
+          <RefreshCw size={16} />
+          {isCheckingImages ? 'Đang kiểm tra' : 'Kiểm tra ảnh'}
+        </button>
+      }
+    >
+      {imageHealthReport && (
+        <div className="maintenance-block">
+          <div className="settings-grid">
+            <Setting label="Đã kiểm tra" value={`${imageHealthReport.total}`} />
+            <Setting label="Ảnh OK" value={`${imageHealthReport.ok}`} />
+            <Setting label="Ảnh hỏng" value={`${imageHealthReport.broken}`} />
+            <Setting label="Thiếu ảnh" value={`${imageHealthReport.missing}`} />
+          </div>
+          <DataTable
+            empty="Không có ảnh hỏng hoặc thiếu trong lần kiểm tra này."
+            headers={['Địa điểm', 'Trạng thái', 'HTTP', 'Lỗi']}
+            rows={unhealthyImages.map((item) => ({
+              key: item.placeId,
+              cells: [
+                <strong>{item.name}</strong>,
+                <StatusPill
+                  tone={item.status === 'BROKEN' ? 'danger' : 'warn'}
+                  label={item.status}
+                />,
+                item.statusCode ?? '-',
+                item.errorMessage ?? '-',
+              ],
+            }))}
+          />
+        </div>
+      )}
       <FilterBar>
         <select
           value={filters.imageStatus ?? ''}
@@ -569,14 +621,22 @@ export function SettingsPage({
   session,
   health,
   autoRefreshEnabled,
+  retentionPreview,
+  retentionResult,
+  retentionRunning,
   onToggleAutoRefresh,
   onRefresh,
+  onRunRetention,
 }: {
   session: AdminSession;
   health: Health | null;
   autoRefreshEnabled: boolean;
+  retentionPreview: RetentionPreview | null;
+  retentionResult: RetentionRunResult | null;
+  retentionRunning: boolean;
   onToggleAutoRefresh: (value: boolean) => void;
   onRefresh: () => void;
+  onRunRetention: () => void;
 }) {
   return (
     <Panel title="Cài đặt" subtitle="Phiên admin và cấu hình kết nối">
@@ -598,6 +658,46 @@ export function SettingsPage({
         <RefreshCw size={17} />
         Tải lại dữ liệu
       </button>
+      <div className="maintenance-block">
+        <div className="panel-head inline-head">
+          <div>
+            <h2>Retention log</h2>
+            <span>Dọn dữ liệu vận hành cũ theo chính sách an toàn.</span>
+          </div>
+          <button
+            className="secondary-button"
+            disabled={retentionRunning}
+            onClick={onRunRetention}
+            type="button"
+          >
+            <RefreshCw size={16} />
+            {retentionRunning ? 'Đang dọn' : 'Chạy dọn log'}
+          </button>
+        </div>
+        <div className="settings-grid">
+          <Setting
+            label={`Request log > ${retentionPreview?.policy.requestLogDays ?? 30} ngày`}
+            value={`${retentionPreview?.counts.apiRequestLogs ?? 0}`}
+          />
+          <Setting
+            label={`Error log > ${retentionPreview?.policy.errorLogDays ?? 90} ngày`}
+            value={`${retentionPreview?.counts.apiErrorLogs ?? 0}`}
+          />
+          <Setting
+            label={`Activity > ${retentionPreview?.policy.systemEventDays ?? 90} ngày`}
+            value={`${retentionPreview?.counts.systemEvents ?? 0}`}
+          />
+          <Setting
+            label={`Image asset > ${retentionPreview?.policy.imageAssetDays ?? 180} ngày`}
+            value={`${retentionPreview?.counts.imageAssets ?? 0}`}
+          />
+        </div>
+        {retentionResult && (
+          <div className="attention-item success-note">
+            Đã dọn {sumRetention(retentionResult.deleted)} bản ghi cũ.
+          </div>
+        )}
+      </div>
     </Panel>
   );
 }
@@ -648,6 +748,15 @@ function Setting({ label, value }: { label: string; value: string }) {
       <span>{label}</span>
       <strong>{valueOrDash(value)}</strong>
     </div>
+  );
+}
+
+function sumRetention(counts: RetentionRunResult['deleted']) {
+  return (
+    counts.apiRequestLogs +
+    counts.apiErrorLogs +
+    counts.systemEvents +
+    counts.imageAssets
   );
 }
 

@@ -713,6 +713,25 @@ code {
   font-weight: 700;
 }
 
+.attention-item.success-note {
+  background: #e8f7ef;
+  color: #116b56;
+}
+
+.maintenance-block {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid #e2ecee;
+  border-radius: 8px;
+  background: #fbfdfd;
+}
+
+.inline-head {
+  margin-bottom: 0;
+}
+
 @keyframes loading {
   from {
     background-position: 0 0;

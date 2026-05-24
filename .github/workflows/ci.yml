@@ -1,0 +1,64 @@
+name: Roamy CI
+
+on:
+  push:
+    branches: [main, "codex/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend and admin web
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://roamy_user:password@localhost:5432/roamy
+      ADMIN_EMAIL: admin@example.com
+      ADMIN_PASSWORD: test-admin-password
+      ADMIN_JWT_SECRET: test-admin-secret
+      NODE_ENV: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            backend/admin/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: backend
+
+      - name: Run backend tests
+        run: npm test
+        working-directory: backend
+
+      - name: Build backend and admin
+        run: npm run build
+        working-directory: backend
+
+  flutter:
+    name: Flutter app
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze Flutter
+        run: flutter analyze
+
+      - name: Run Flutter tests
+        run: flutter test

@@ -2,6 +2,12 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 
 import { AppError } from '../../utils/errors';
+import {
+  adminLoginIdentifier,
+  assertAdminLoginAllowed,
+  recordAdminLoginFailure,
+  recordAdminLoginSuccess,
+} from './admin.rate-limit';
 
 type AdminTokenPayload = {
   sub: 'roamy-admin';
@@ -27,9 +33,16 @@ export function authenticateAdmin(
   return next();
 }
 
-export function loginAdmin(email: string, password: string) {
+export function loginAdmin(
+  email: string,
+  password: string,
+  context: { ipAddress?: string | null } = {},
+) {
   const configuredEmail = adminEmail();
   const configuredPassword = process.env.ADMIN_PASSWORD;
+  const identifier = adminLoginIdentifier(email, context.ipAddress);
+
+  assertAdminLoginAllowed(identifier);
 
   if (!configuredPassword && process.env.NODE_ENV === 'production') {
     throw new AppError(500, 'Admin credentials are not configured');
@@ -39,8 +52,11 @@ export function loginAdmin(email: string, password: string) {
   const validPassword = password === (configuredPassword ?? 'admin123');
 
   if (!validEmail || !validPassword) {
+    recordAdminLoginFailure(identifier);
     throw new AppError(401, 'Invalid admin credentials');
   }
+
+  recordAdminLoginSuccess(identifier);
 
   return {
     token: signAdminToken(configuredEmail),

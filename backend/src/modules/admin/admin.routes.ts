@@ -26,6 +26,9 @@ adminRoutes.get('/activity', adminController.activity);
 adminRoutes.get('/errors', adminController.errors);
 adminRoutes.get('/requests', adminController.requests);
 adminRoutes.get('/uploads', adminController.uploads);
+adminRoutes.post('/images/check', adminController.checkImages);
+adminRoutes.get('/maintenance/retention/preview', adminController.retentionPreview);
+adminRoutes.post('/maintenance/retention/run', adminController.runRetention);
 adminRoutes.patch('/places/:id', validate(placeUpdateSchema), adminController.updatePlace);
 adminRoutes.delete('/places/:id', validate(placeIdSchema), adminController.deletePlace);
 adminRoutes.patch(

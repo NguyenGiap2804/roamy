@@ -25,10 +25,13 @@ import type {
   CategoryUpdatePayload,
   Health,
   ImageAsset,
+  ImageHealthReport,
   ListResponse,
   Overview,
   Place,
   PlaceUpdatePayload,
+  RetentionPreview,
+  RetentionRunResult,
   Schedule,
   ScheduleUpdatePayload,
   SystemEvent,
@@ -83,6 +86,14 @@ export function App() {
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [loadingSection, setLoadingSection] = useState<Section | null>(null);
+  const [checkingImages, setCheckingImages] = useState(false);
+  const [imageHealthReport, setImageHealthReport] =
+    useState<ImageHealthReport | null>(null);
+  const [retentionPreview, setRetentionPreview] =
+    useState<RetentionPreview | null>(null);
+  const [retentionResult, setRetentionResult] =
+    useState<RetentionRunResult | null>(null);
+  const [retentionRunning, setRetentionRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
 
@@ -149,7 +160,14 @@ export function App() {
           ]);
           setOverview(nextOverview);
           setHealth(nextHealth);
-        } else if (active === 'health' || active === 'settings') {
+        } else if (active === 'settings') {
+          const [nextHealth, nextRetentionPreview] = await Promise.all([
+            api.health(),
+            api.retentionPreview(),
+          ]);
+          setHealth(nextHealth);
+          setRetentionPreview(nextRetentionPreview);
+        } else if (active === 'health') {
           setHealth(await api.health());
         } else if (active === 'places') {
           const places = await api.places(listQuery(active));
@@ -264,6 +282,35 @@ export function App() {
     } catch (mutationError) {
       setError(handleError(mutationError));
       throw mutationError;
+    }
+  }
+
+  async function checkImages() {
+    setCheckingImages(true);
+    setError(null);
+    try {
+      const report = await api.checkImages({ limit: 100, q: query });
+      setImageHealthReport(report);
+      await loadCurrent(true);
+    } catch (checkError) {
+      setError(handleError(checkError));
+    } finally {
+      setCheckingImages(false);
+    }
+  }
+
+  async function runRetention() {
+    setRetentionRunning(true);
+    setError(null);
+    try {
+      const result = await api.runRetention();
+      setRetentionResult(result);
+      setRetentionPreview(result);
+      await loadCurrent(true);
+    } catch (retentionError) {
+      setError(handleError(retentionError));
+    } finally {
+      setRetentionRunning(false);
     }
   }
 
@@ -390,6 +437,9 @@ export function App() {
         <UploadsPage
           data={lists.uploads}
           filters={sectionFilters('uploads')}
+          imageHealthReport={imageHealthReport}
+          isCheckingImages={checkingImages}
+          onCheckImages={() => void checkImages()}
           onFilterChange={(patch) => changeFilters('uploads', patch)}
           onOpen={setDrawer}
         />
@@ -402,8 +452,12 @@ export function App() {
       <SettingsPage
         autoRefreshEnabled={autoRefreshEnabled}
         health={health}
+        retentionPreview={retentionPreview}
+        retentionResult={retentionResult}
+        retentionRunning={retentionRunning}
         session={activeSession}
         onRefresh={() => void loadCurrent()}
+        onRunRetention={() => void runRetention()}
         onToggleAutoRefresh={setAutoRefreshEnabled}
       />
     );

@@ -3,13 +3,17 @@ import test from 'node:test';
 import type { NextFunction, Request, Response } from 'express';
 
 import { authenticateAdmin, loginAdmin } from '../src/modules/admin/admin.auth';
+import { resetAdminLoginRateLimitForTests } from '../src/modules/admin/admin.rate-limit';
 import { AppError } from '../src/utils/errors';
 
 test('admin login returns a signed token for valid credentials', () => {
+  resetAdminLoginRateLimitForTests();
   const restoreEnv = withAdminEnv();
 
   try {
-    const result = loginAdmin('admin@example.com', 'secret-password');
+    const result = loginAdmin('admin@example.com', 'secret-password', {
+      ipAddress: '127.0.0.1',
+    });
 
     assert.equal(result.admin.email, 'admin@example.com');
     assert.equal(typeof result.token, 'string');
@@ -20,11 +24,15 @@ test('admin login returns a signed token for valid credentials', () => {
 });
 
 test('admin login rejects invalid credentials', () => {
+  resetAdminLoginRateLimitForTests();
   const restoreEnv = withAdminEnv();
 
   try {
     assert.throws(
-      () => loginAdmin('admin@example.com', 'wrong-password'),
+      () =>
+        loginAdmin('admin@example.com', 'wrong-password', {
+          ipAddress: '127.0.0.1',
+        }),
       (error: unknown) => {
         assert(error instanceof AppError);
         assert.equal(error.statusCode, 401);
@@ -33,6 +41,57 @@ test('admin login rejects invalid credentials', () => {
     );
   } finally {
     restoreEnv();
+  }
+});
+
+test('admin login rate limits repeated invalid credentials', () => {
+  resetAdminLoginRateLimitForTests();
+  const restoreEnv = withAdminEnv();
+
+  try {
+    for (let index = 0; index < 5; index += 1) {
+      assert.throws(() =>
+        loginAdmin('admin@example.com', 'wrong-password', {
+          ipAddress: '10.0.0.8',
+        }),
+      );
+    }
+
+    assert.throws(
+      () =>
+        loginAdmin('admin@example.com', 'wrong-password', {
+          ipAddress: '10.0.0.8',
+        }),
+      (error: unknown) => {
+        assert(error instanceof AppError);
+        assert.equal(error.statusCode, 429);
+        return true;
+      },
+    );
+  } finally {
+    restoreEnv();
+    resetAdminLoginRateLimitForTests();
+  }
+});
+
+test('admin login success clears previous failed attempts', () => {
+  resetAdminLoginRateLimitForTests();
+  const restoreEnv = withAdminEnv();
+
+  try {
+    assert.throws(() =>
+      loginAdmin('admin@example.com', 'wrong-password', {
+        ipAddress: '10.0.0.9',
+      }),
+    );
+
+    const result = loginAdmin('admin@example.com', 'secret-password', {
+      ipAddress: '10.0.0.9',
+    });
+    assert.equal(result.admin.email, 'admin@example.com');
+  } finally {
+    restoreEnv();
+    resetAdminLoginRateLimitForTests();
   }
 });
 
@@ -46,6 +105,7 @@ test('admin middleware rejects requests without bearer token', () => {
 });
 
 test('admin middleware accepts a valid bearer token', () => {
+  resetAdminLoginRateLimitForTests();
   const restoreEnv = withAdminEnv();
 
   try {
