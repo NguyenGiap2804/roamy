@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/auth_user.dart';
@@ -48,7 +50,10 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> login(String email, String password) async {
     await _runBusy(() async {
-      final session = await _authService.login(email: email, password: password);
+      final session = await _authService.login(
+        email: email,
+        password: password,
+      );
       await _applySession(session);
     });
   }
@@ -142,9 +147,9 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> logout() async {
     final refreshToken = await _tokenStore.readRefreshToken();
-    await _authService.logout(refreshToken);
     await _clearLocalSession();
     notifyListeners();
+    unawaited(_authService.logout(refreshToken));
   }
 
   Future<void> forceLogout() async {
@@ -183,11 +188,34 @@ class AuthProvider extends ChangeNotifier {
     try {
       await action();
     } catch (error) {
-      _errorMessage = error.toString();
+      _errorMessage = _friendlyAuthError(error.toString());
       rethrow;
     } finally {
       _isBusy = false;
       notifyListeners();
     }
+  }
+
+  String _friendlyAuthError(String message) {
+    final normalized = message.toLowerCase();
+    if (normalized.contains('invalid email or password')) {
+      return 'Email hoặc mật khẩu không đúng.';
+    }
+    if (normalized.contains('request timed out')) {
+      return 'Kết nối quá lâu. Vui lòng thử lại.';
+    }
+    if (normalized.contains('email is not verified')) {
+      return 'Tài khoản chưa được xác thực.';
+    }
+    if (normalized.contains('could not send auth email')) {
+      return 'Chưa gửi được email. Vui lòng thử lại sau.';
+    }
+    if (normalized.contains('google')) {
+      return message;
+    }
+    if (normalized.contains('network error')) {
+      return 'Không thể kết nối máy chủ. Vui lòng kiểm tra mạng.';
+    }
+    return message;
   }
 }

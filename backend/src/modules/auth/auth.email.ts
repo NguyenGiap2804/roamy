@@ -1,8 +1,8 @@
-import { promises as dns, setDefaultResultOrder } from 'dns';
-import nodemailer from 'nodemailer';
-import SMTPTransport from 'nodemailer/lib/smtp-transport';
+import { promises as dns, setDefaultResultOrder } from "dns";
+import nodemailer from "nodemailer";
+import SMTPTransport from "nodemailer/lib/smtp-transport";
 
-import { AppError } from '../../utils/errors';
+import { AppError } from "../../utils/errors";
 
 type AuthEmailInput = {
   to: string;
@@ -19,14 +19,14 @@ export async function sendAuthEmail(input: AuthEmailInput) {
   const timeoutMs = Number(process.env.SMTP_TIMEOUT_MS || 8000);
 
   if (!host || !user || !pass || !from) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new AppError(500, 'Email delivery is not configured');
+    if (process.env.NODE_ENV === "production") {
+      throw new AppError(500, "Email delivery is not configured");
     }
-    console.log('[Roamy Auth Email]', input);
+    console.log("[Roamy Auth Email]", input);
     return;
   }
 
-  setDefaultResultOrder('ipv4first');
+  setDefaultResultOrder("ipv4first");
   const transportHost = await resolveTransportHost(host);
 
   try {
@@ -35,7 +35,7 @@ export async function sendAuthEmail(input: AuthEmailInput) {
         host,
         transportHost,
         port,
-        secure: process.env.SMTP_SECURE === 'true',
+        secure: process.env.SMTP_SECURE === "true",
         user,
         pass,
         timeoutMs,
@@ -122,23 +122,28 @@ function shouldFallbackToGmailStartTls(
   host: string,
   port: number,
 ) {
-  if (!host.toLowerCase().includes('gmail.com') || port !== 465) {
+  if (!host.toLowerCase().includes("gmail.com") || port !== 465) {
     return false;
   }
 
-  const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : null;
-  return code === 'ETIMEDOUT' || code === 'ESOCKET' || code === 'ENETUNREACH';
+  const code =
+    error instanceof Error ? (error as NodeJS.ErrnoException).code : null;
+  return code === "ETIMEDOUT" || code === "ESOCKET" || code === "ENETUNREACH";
 }
 
 function emailDeliveryError(error: unknown) {
-  return new AppError(502, 'Could not send auth email. Please try again later.', {
-    cause: sanitizeEmailError(error),
-  });
+  return new AppError(
+    502,
+    "Could not send auth email. Please try again later.",
+    {
+      cause: sanitizeEmailError(error),
+    },
+  );
 }
 
 function sanitizeEmailError(error: unknown) {
   if (!(error instanceof Error)) {
-    return 'Unknown email delivery error';
+    return "Unknown email delivery error";
   }
 
   const code = (error as NodeJS.ErrnoException).code;

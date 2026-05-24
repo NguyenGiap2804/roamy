@@ -1,8 +1,8 @@
-import { NextFunction, Request, Response } from 'express';
+import { NextFunction, Request, Response } from "express";
 
-import { sendResponse } from '../../utils/response';
-import { requireUserId } from './auth.middleware';
-import { authService } from './auth.service';
+import { sendResponse } from "../../utils/response";
+import { requireUserId } from "./auth.middleware";
+import { authService } from "./auth.service";
 
 export class AuthController {
   async register(req: Request, res: Response, next: NextFunction) {
@@ -10,7 +10,7 @@ export class AuthController {
       return sendResponse(
         res,
         201,
-        'Registered successfully',
+        "Registered successfully",
         await authService.register(req.body, authContext(req)),
       );
     } catch (error) {
@@ -23,7 +23,7 @@ export class AuthController {
       return sendResponse(
         res,
         200,
-        'Logged in successfully',
+        "Logged in successfully",
         await authService.login(req.body, authContext(req)),
       );
     } catch (error) {
@@ -36,7 +36,7 @@ export class AuthController {
       return sendResponse(
         res,
         200,
-        'Logged in with Google successfully',
+        "Logged in with Google successfully",
         await authService.loginWithGoogle(req.body, authContext(req)),
       );
     } catch (error) {
@@ -49,7 +49,7 @@ export class AuthController {
       return sendResponse(
         res,
         200,
-        'Session refreshed successfully',
+        "Session refreshed successfully",
         await authService.refresh(req.body.refreshToken, authContext(req)),
       );
     } catch (error) {
@@ -62,7 +62,7 @@ export class AuthController {
       return sendResponse(
         res,
         200,
-        'Logged out successfully',
+        "Logged out successfully",
         await authService.logout(req.body.refreshToken),
       );
     } catch (error) {
@@ -75,7 +75,7 @@ export class AuthController {
       return sendResponse(
         res,
         200,
-        'Verification email sent if the account exists',
+        "Verification email sent if the account exists",
         await authService.resendVerification(req.body.email),
       );
     } catch (error) {
@@ -88,8 +88,12 @@ export class AuthController {
       return sendResponse(
         res,
         200,
-        'Email verified successfully',
-        await authService.verifyEmail(req.body.email, req.body.code, authContext(req)),
+        "Email verified successfully",
+        await authService.verifyEmail(
+          req.body.email,
+          req.body.code,
+          authContext(req),
+        ),
       );
     } catch (error) {
       return next(error);
@@ -101,7 +105,7 @@ export class AuthController {
       return sendResponse(
         res,
         200,
-        'Password reset email sent if the account exists',
+        "Password reset email sent if the account exists",
         await authService.forgotPassword(req.body.email),
       );
     } catch (error) {
@@ -114,7 +118,7 @@ export class AuthController {
       return sendResponse(
         res,
         200,
-        'Password reset successfully',
+        "Password reset successfully",
         await authService.resetPassword(req.body, authContext(req)),
       );
     } catch (error) {
@@ -127,7 +131,7 @@ export class AuthController {
       return sendResponse(
         res,
         200,
-        'Profile fetched successfully',
+        "Profile fetched successfully",
         await authService.me(requireUserId(req)),
       );
     } catch (error) {
@@ -140,7 +144,7 @@ export class AuthController {
       return sendResponse(
         res,
         200,
-        'Profile updated successfully',
+        "Profile updated successfully",
         await authService.updateMe(requireUserId(req), req.body),
       );
     } catch (error) {
@@ -154,7 +158,7 @@ export const authController = new AuthController();
 function authContext(req: Request) {
   return {
     deviceId: req.deviceId ?? null,
-    userAgent: req.get('user-agent') ?? null,
+    userAgent: req.get("user-agent") ?? null,
     ipAddress: req.ip,
   };
 }

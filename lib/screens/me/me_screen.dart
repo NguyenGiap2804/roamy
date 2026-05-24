@@ -49,199 +49,214 @@ class _MeScreenState extends State<MeScreen> {
   Widget build(BuildContext context) {
     return SafeArea(
       child:
-          Consumer4<PlaceProvider, CategoryProvider, ThemeProvider, AuthProvider>(
-        builder: (
-          context,
-          placeProvider,
-          categoryProvider,
-          themeProvider,
-          authProvider,
-          _,
-        ) {
-          final user = authProvider.user;
-          final places = _filteredPlaces(placeProvider.places);
+          Consumer4<
+            PlaceProvider,
+            CategoryProvider,
+            ThemeProvider,
+            AuthProvider
+          >(
+            builder:
+                (
+                  context,
+                  placeProvider,
+                  categoryProvider,
+                  themeProvider,
+                  authProvider,
+                  _,
+                ) {
+                  final user = authProvider.user;
+                  final places = _filteredPlaces(placeProvider.places);
 
-          return RefreshIndicator(
-            onRefresh: () => placeProvider.fetchPlaces(forceRefresh: true),
-            child: ListView(
-              padding: const EdgeInsets.all(AppSpacing.xl),
-              children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 30,
-                      backgroundColor: themeProvider.isDarkMode
-                          ? Colors.white10
-                          : AppColors.primarySoft,
-                      child: Text(
-                        _initials(user?.name ?? user?.email ?? 'R'),
-                        style: AppTextStyles.title.copyWith(
-                          color: themeProvider.isDarkMode
-                              ? Colors.white
-                              : AppColors.primaryDark,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            user?.name.isNotEmpty == true
-                                ? user!.name
-                                : 'Roamy user',
-                            style: AppTextStyles.headline.copyWith(
-                              fontSize: 22,
+                  return RefreshIndicator(
+                    onRefresh: () =>
+                        placeProvider.fetchPlaces(forceRefresh: true),
+                    child: ListView(
+                      padding: const EdgeInsets.all(AppSpacing.xl),
+                      children: [
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 30,
+                              backgroundColor: themeProvider.isDarkMode
+                                  ? Colors.white10
+                                  : AppColors.primarySoft,
+                              child: Text(
+                                _initials(user?.name ?? user?.email ?? 'R'),
+                                style: AppTextStyles.title.copyWith(
+                                  color: themeProvider.isDarkMode
+                                      ? Colors.white
+                                      : AppColors.primaryDark,
+                                ),
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 4),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    user?.name.isNotEmpty == true
+                                        ? user!.name
+                                        : 'Roamy user',
+                                    style: AppTextStyles.headline.copyWith(
+                                      fontSize: 22,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    user?.email ?? 'Đăng nhập Roamy',
+                                    style: AppTextStyles.subtitle,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => themeProvider.toggleTheme(),
+                              icon: Icon(
+                                themeProvider.isDarkMode
+                                    ? Icons.light_mode_rounded
+                                    : Icons.dark_mode_rounded,
+                                color: themeProvider.isDarkMode
+                                    ? Colors.amber
+                                    : AppColors.textSecondary,
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Đăng xuất',
+                              onPressed: authProvider.isBusy
+                                  ? null
+                                  : () async {
+                                      context.read<PlaceProvider>().clear();
+                                      context.read<CategoryProvider>().clear();
+                                      context.read<ScheduleProvider>().clear();
+                                      await context
+                                          .read<AuthProvider>()
+                                          .logout();
+                                    },
+                              icon: const Icon(Icons.logout_rounded),
+                            ),
+                          ],
+                        ),
+                        if (user != null) ...[
+                          const SizedBox(height: 12),
+                          _ProfileStatus(emailVerified: user.emailVerified),
+                        ],
+                        const SizedBox(height: 22),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _StatCard(
+                                icon: Icons.place_rounded,
+                                value: '${placeProvider.places.length}',
+                                label: 'Địa điểm',
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _StatCard(
+                                icon: Icons.category_rounded,
+                                value: '${categoryProvider.categories.length}',
+                                label: 'Danh mục',
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _StatCard(
+                                icon: Icons.star_rounded,
+                                value: _averageRating(placeProvider.places),
+                                label: 'Rating TB',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        _QuickLinkTile(
+                          icon: Icons.history_rounded,
+                          label: 'Lịch sử đã đi',
+                          subtitle: 'Xem những nơi bạn đã ghé thăm',
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const VisitHistoryScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 24),
+                        const SectionTitle(
+                          title: 'Địa điểm đã lưu',
+                          icon: Icons.bookmark_rounded,
+                        ),
+                        if (placeProvider.hasPendingSync) ...[
+                          const SizedBox(height: 8),
                           Text(
-                            user?.email ?? 'Dang nhap Roamy',
-                            style: AppTextStyles.subtitle,
+                            'Đang đồng bộ thay đổi...',
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.primaryDark,
+                            ),
                           ),
                         ],
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => themeProvider.toggleTheme(),
-                      icon: Icon(
-                        themeProvider.isDarkMode
-                            ? Icons.light_mode_rounded
-                            : Icons.dark_mode_rounded,
-                        color: themeProvider.isDarkMode
-                            ? Colors.amber
-                            : AppColors.textSecondary,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Dang xuat',
-                      onPressed: authProvider.isBusy
-                          ? null
-                          : () async {
-                              context.read<PlaceProvider>().clear();
-                              context.read<CategoryProvider>().clear();
-                              context.read<ScheduleProvider>().clear();
-                              await context.read<AuthProvider>().logout();
-                            },
-                      icon: const Icon(Icons.logout_rounded),
-                    ),
-                  ],
-                ),
-                if (user != null) ...[
-                  const SizedBox(height: 12),
-                  _ProfileStatus(emailVerified: user.emailVerified),
-                ],
-                const SizedBox(height: 22),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _StatCard(
-                        icon: Icons.place_rounded,
-                        value: '${placeProvider.places.length}',
-                        label: 'Dia diem',
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _StatCard(
-                        icon: Icons.category_rounded,
-                        value: '${categoryProvider.categories.length}',
-                        label: 'Danh muc',
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _StatCard(
-                        icon: Icons.star_rounded,
-                        value: _averageRating(placeProvider.places),
-                        label: 'Rating TB',
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                _QuickLinkTile(
-                  icon: Icons.history_rounded,
-                  label: 'Lich su da di',
-                  subtitle: 'Xem nhung noi ban da ghe tham',
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const VisitHistoryScreen(),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 24),
-                const SectionTitle(
-                  title: 'Dia diem da luu',
-                  icon: Icons.bookmark_rounded,
-                ),
-                if (placeProvider.hasPendingSync) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Dang dong bo thay doi...',
-                    style: AppTextStyles.caption.copyWith(
-                      color: AppColors.primaryDark,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                TextField(
-                  onChanged: (value) => setState(() => _searchQuery = value),
-                  decoration: const InputDecoration(
-                    hintText: 'Tim trong dia diem da luu...',
-                    prefixIcon: Icon(Icons.search_rounded),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                if (placeProvider.isLoading && placeProvider.places.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 36),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else if (placeProvider.errorMessage != null)
-                  EmptyState(
-                    icon: Icons.cloud_off_rounded,
-                    title: 'Khong the tai dia diem',
-                    message: placeProvider.errorMessage!,
-                  )
-                else if (places.isEmpty)
-                  const EmptyState(
-                    icon: Icons.bookmark_border_rounded,
-                    title: 'Chua co dia diem nao',
-                    message: 'Them dia diem tu trang chu de bat dau.',
-                  )
-                else
-                  ...places.map(
-                    (place) => Padding(
-                      padding: const EdgeInsets.only(bottom: 14),
-                      child: PlaceCard(
-                        place: place,
-                        onUpdate: () async {
-                          await Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => AddPlaceScreen(place: place),
+                        const SizedBox(height: 12),
+                        TextField(
+                          onChanged: (value) =>
+                              setState(() => _searchQuery = value),
+                          decoration: const InputDecoration(
+                            hintText: 'Tìm trong địa điểm đã lưu...',
+                            prefixIcon: Icon(Icons.search_rounded),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        if (placeProvider.isLoading &&
+                            placeProvider.places.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 36),
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (placeProvider.errorMessage != null)
+                          EmptyState(
+                            icon: Icons.cloud_off_rounded,
+                            title: 'Không thể tải địa điểm',
+                            message: placeProvider.errorMessage!,
+                          )
+                        else if (places.isEmpty)
+                          const EmptyState(
+                            icon: Icons.bookmark_border_rounded,
+                            title: 'Chưa có địa điểm nào',
+                            message: 'Thêm địa điểm từ trang chủ để bắt đầu.',
+                          )
+                        else
+                          ...places.map(
+                            (place) => Padding(
+                              padding: const EdgeInsets.only(bottom: 14),
+                              child: PlaceCard(
+                                place: place,
+                                onUpdate: () async {
+                                  await Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          AddPlaceScreen(place: place),
+                                    ),
+                                  );
+                                },
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          PlaceDetailScreen(place: place),
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
-                          );
-                        },
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => PlaceDetailScreen(place: place),
-                            ),
-                          );
-                        },
-                      ),
+                          ),
+                        SizedBox(
+                          height: MediaQuery.of(context).padding.bottom + 24,
+                        ),
+                      ],
                     ),
-                  ),
-                SizedBox(height: MediaQuery.of(context).padding.bottom + 24),
-              ],
-            ),
-          );
-        },
-      ),
+                  );
+                },
+          ),
     );
   }
 
@@ -287,7 +302,7 @@ class _ProfileStatus extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              emailVerified ? 'Email da xac thuc' : 'Email chua xac thuc',
+              emailVerified ? 'Email đã xác thực' : 'Email chưa xác thực',
               style: AppTextStyles.caption,
             ),
           ),

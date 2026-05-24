@@ -28,14 +28,11 @@ class AuthService {
   bool _googleInitialized = false;
   static const _timeout = Duration(seconds: 12);
 
-  Future<AuthSession> login({
-    required String email,
-    required String password,
-  }) {
-    return _postSession(
-      ApiEndpoints.authLogin,
-      {'email': email, 'password': password},
-    );
+  Future<AuthSession> login({required String email, required String password}) {
+    return _postSession(ApiEndpoints.authLogin, {
+      'email': email,
+      'password': password,
+    });
   }
 
   Future<AuthSession> register({
@@ -43,20 +40,21 @@ class AuthService {
     required String email,
     required String password,
   }) {
-    return _postSession(
-      ApiEndpoints.authRegister,
-      {'name': name, 'email': email, 'password': password},
-    );
+    return _postSession(ApiEndpoints.authRegister, {
+      'name': name,
+      'email': email,
+      'password': password,
+    });
   }
 
   Future<AuthSession> verifyEmail({
     required String email,
     required String code,
   }) {
-    return _postSession(
-      ApiEndpoints.authVerifyEmail,
-      {'email': email, 'code': code},
-    );
+    return _postSession(ApiEndpoints.authVerifyEmail, {
+      'email': email,
+      'code': code,
+    });
   }
 
   Future<void> resendVerification(String email) async {
@@ -72,18 +70,17 @@ class AuthService {
     required String code,
     required String password,
   }) {
-    return _postSession(
-      ApiEndpoints.authResetPassword,
-      {'email': email, 'code': code, 'password': password},
-    );
+    return _postSession(ApiEndpoints.authResetPassword, {
+      'email': email,
+      'code': code,
+      'password': password,
+    });
   }
 
   Future<AuthSession> refresh(String refreshToken) {
-    return _postSession(
-      ApiEndpoints.authRefresh,
-      {'refreshToken': refreshToken},
-      persist: false,
-    );
+    return _postSession(ApiEndpoints.authRefresh, {
+      'refreshToken': refreshToken,
+    }, persist: false);
   }
 
   Future<void> logout(String? refreshToken) async {
@@ -169,12 +166,14 @@ class AuthService {
     try {
       final requestHeaders = await _headers(headers);
       final response = switch (method) {
-        'PATCH' => await _client
-            .patch(uri, headers: requestHeaders, body: jsonEncode(body))
-            .timeout(_timeout),
-        'POST' => await _client
-            .post(uri, headers: requestHeaders, body: jsonEncode(body))
-            .timeout(_timeout),
+        'PATCH' =>
+          await _client
+              .patch(uri, headers: requestHeaders, body: jsonEncode(body))
+              .timeout(_timeout),
+        'POST' =>
+          await _client
+              .post(uri, headers: requestHeaders, body: jsonEncode(body))
+              .timeout(_timeout),
         _ => await _client.get(uri, headers: requestHeaders).timeout(_timeout),
       };
       return _handleResponse(response);
@@ -234,17 +233,16 @@ class AuthService {
 
   String _googleSignInMessage(GoogleSignInException error) {
     return switch (error.code) {
-      GoogleSignInExceptionCode.canceled =>
-        'Khong the dang nhap Google. Neu ban khong huy thao tac, hay kiem tra Android OAuth client package/SHA-1 roi thu lai.',
+      GoogleSignInExceptionCode.canceled => 'Bạn đã hủy đăng nhập Google.',
       GoogleSignInExceptionCode.interrupted =>
-        'Dang nhap Google bi gian doan. Vui long thu lai.',
+        'Đăng nhập Google bị gián đoạn. Vui lòng thử lại.',
       GoogleSignInExceptionCode.clientConfigurationError =>
-        'Cau hinh Google Sign-In chua dung. Kiem tra Web client id va Android OAuth client.',
+        'Không thể đăng nhập bằng Google. Vui lòng thử lại sau.',
       GoogleSignInExceptionCode.providerConfigurationError =>
-        'Google Sign-In chua duoc cau hinh dung tren thiet bi nay.',
+        'Không thể đăng nhập bằng Google trên thiết bị này.',
       GoogleSignInExceptionCode.uiUnavailable =>
-        'Thiet bi nay khong mo duoc giao dien dang nhap Google.',
-      _ => 'Khong the dang nhap Google. Vui long thu lai.',
+        'Không mở được màn hình đăng nhập Google.',
+      _ => 'Không thể đăng nhập bằng Google. Vui lòng thử lại.',
     };
   }
 }

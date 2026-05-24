@@ -1,23 +1,19 @@
-import { randomInt } from 'crypto';
-import bcrypt from 'bcryptjs';
-import { AuthProvider, EmailTokenType, User } from '@prisma/client';
+import { randomInt } from "crypto";
+import bcrypt from "bcryptjs";
+import { AuthProvider, EmailTokenType, User } from "@prisma/client";
 
-import { prisma } from '../../config/db';
-import { AppError, ConflictError, NotFoundError } from '../../utils/errors';
-import { sendAuthEmail } from './auth.email';
-import { verifyGoogleIdToken } from './auth.google';
-import {
-  createRefreshToken,
-  hashSecret,
-  signAccessToken,
-} from './auth.tokens';
+import { prisma } from "../../config/db";
+import { AppError, ConflictError, NotFoundError } from "../../utils/errors";
+import { sendAuthEmail } from "./auth.email";
+import { verifyGoogleIdToken } from "./auth.google";
+import { createRefreshToken, hashSecret, signAccessToken } from "./auth.tokens";
 import {
   GoogleLoginInput,
   LoginInput,
   RegisterInput,
   ResetPasswordInput,
   UpdateMeInput,
-} from './auth.model';
+} from "./auth.model";
 
 type AuthContext = {
   deviceId?: string | null;
@@ -36,7 +32,7 @@ export class AuthService {
     const existing = await prisma.user.findUnique({ where: { email } });
 
     if (existing?.passwordHash && existing.emailVerifiedAt) {
-      throw new ConflictError('Email is already registered');
+      throw new ConflictError("Email is already registered");
     }
 
     const user = existing
@@ -91,16 +87,19 @@ export class AuthService {
     });
 
     if (!user?.passwordHash) {
-      throw new AppError(401, 'Invalid email or password');
+      throw new AppError(401, "Invalid email or password");
     }
 
-    const validPassword = await bcrypt.compare(input.password, user.passwordHash);
+    const validPassword = await bcrypt.compare(
+      input.password,
+      user.passwordHash,
+    );
     if (!validPassword) {
-      throw new AppError(401, 'Invalid email or password');
+      throw new AppError(401, "Invalid email or password");
     }
 
     if (!user.emailVerifiedAt) {
-      throw new AppError(403, 'Email is not verified');
+      throw new AppError(403, "Email is not verified");
     }
 
     return this.createSession(
@@ -151,7 +150,7 @@ export class AuthService {
       current.revokedAt ||
       current.expiresAt.getTime() <= Date.now()
     ) {
-      throw new AppError(401, 'Invalid refresh token');
+      throw new AppError(401, "Invalid refresh token");
     }
 
     const rawRefreshToken = createRefreshToken();
@@ -225,7 +224,7 @@ export class AuthService {
       );
       await sendAuthEmail({
         to: user.email,
-        subject: 'Reset your Roamy password',
+        subject: "Reset your Roamy password",
         text: `Your Roamy password reset code is ${code}. It expires in 15 minutes.`,
       });
     }
@@ -274,7 +273,7 @@ export class AuthService {
   async me(userId: string) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
-      throw new NotFoundError('User not found');
+      throw new NotFoundError("User not found");
     }
     return serializeUser(user);
   }
@@ -355,10 +354,13 @@ export class AuthService {
   }
 
   private async sendVerificationCode(user: User) {
-    const code = await this.createEmailToken(user.id, EmailTokenType.VERIFY_EMAIL);
+    const code = await this.createEmailToken(
+      user.id,
+      EmailTokenType.VERIFY_EMAIL,
+    );
     await sendAuthEmail({
       to: user.email,
-      subject: 'Verify your Roamy account',
+      subject: "Verify your Roamy account",
       text: `Your Roamy verification code is ${code}. It expires in 15 minutes.`,
     });
   }
@@ -387,19 +389,19 @@ export class AuthService {
   ) {
     const token = await prisma.emailToken.findFirst({
       where: { userId, type, consumedAt: null },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
     if (!token) {
-      throw new AppError(400, 'Invalid verification code');
+      throw new AppError(400, "Invalid verification code");
     }
 
     if (token.expiresAt.getTime() <= Date.now()) {
-      throw new AppError(400, 'Verification code has expired');
+      throw new AppError(400, "Verification code has expired");
     }
 
     if (token.attempts >= maxEmailTokenAttempts) {
-      throw new AppError(429, 'Too many verification attempts');
+      throw new AppError(429, "Too many verification attempts");
     }
 
     if (token.codeHash !== hashSecret(code)) {
@@ -407,7 +409,7 @@ export class AuthService {
         where: { id: token.id },
         data: { attempts: { increment: 1 } },
       });
-      throw new AppError(400, 'Invalid verification code');
+      throw new AppError(400, "Invalid verification code");
     }
 
     await prisma.emailToken.update({
@@ -421,7 +423,7 @@ export class AuthService {
       where: { email: normalizeEmail(emailInput) },
     });
     if (!user) {
-      throw new NotFoundError('User not found');
+      throw new NotFoundError("User not found");
     }
     return user;
   }

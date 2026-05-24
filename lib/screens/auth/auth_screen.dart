@@ -41,18 +41,19 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final title = switch (_mode) {
-      _AuthMode.login => 'Dang nhap Roamy',
-      _AuthMode.register => 'Tao tai khoan',
-      _AuthMode.verify => 'Xac thuc email',
-      _AuthMode.forgot => 'Quen mat khau',
-      _AuthMode.reset => 'Dat lai mat khau',
+      _AuthMode.login => 'Đăng nhập Roamy',
+      _AuthMode.register => 'Tạo tài khoản',
+      _AuthMode.verify => 'Xác thực email',
+      _AuthMode.forgot => 'Quên mật khẩu',
+      _AuthMode.reset => 'Đặt lại mật khẩu',
     };
     final subtitle = switch (_mode) {
-      _AuthMode.login => 'Dang nhap de dong bo dia diem cua rieng ban.',
-      _AuthMode.register => 'Tao tai khoan moi de su dung Roamy tren nhieu thiet bi.',
-      _AuthMode.verify => 'Nhap ma 6 so da gui ve email cua ban.',
-      _AuthMode.forgot => 'Nhap email de nhan ma dat lai mat khau.',
-      _AuthMode.reset => 'Nhap ma 6 so va mat khau moi.',
+      _AuthMode.login => 'Đăng nhập để đồng bộ địa điểm của riêng bạn.',
+      _AuthMode.register =>
+        'Tạo tài khoản mới để dùng Roamy trên nhiều thiết bị.',
+      _AuthMode.verify => 'Nhập mã 6 số đã gửi về email của bạn.',
+      _AuthMode.forgot => 'Nhập email để nhận mã đặt lại mật khẩu.',
+      _AuthMode.reset => 'Nhập mã 6 số và mật khẩu mới.',
     };
 
     return Scaffold(
@@ -67,15 +68,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Image.asset(
-                      'assets/logo.png',
-                      height: 86,
-                      errorBuilder: (_, _, _) => const Icon(
-                        Icons.place_rounded,
-                        color: AppColors.primary,
-                        size: 72,
-                      ),
-                    ),
+                    const _AuthBrandMark(),
                     const SizedBox(height: 18),
                     Text(
                       title,
@@ -111,14 +104,11 @@ class _AuthScreenState extends State<AuthScreen> {
                       OutlinedButton.icon(
                         onPressed: auth.isBusy ? null : () => _google(auth),
                         icon: const Icon(Icons.g_mobiledata_rounded),
-                        label: const Text('Dang nhap bang Google'),
+                        label: const Text('Đăng nhập bằng Google'),
                       ),
                     ],
                     const SizedBox(height: 16),
-                    _ModeLinks(
-                      mode: _mode,
-                      onModeChanged: _changeMode,
-                    ),
+                    _ModeLinks(mode: _mode, onModeChanged: _changeMode),
                   ],
                 ),
               ),
@@ -135,7 +125,7 @@ class _AuthScreenState extends State<AuthScreen> {
       fields.add(
         _TextInput(
           controller: _nameController,
-          label: 'Ten hien thi',
+          label: 'Tên hiển thị',
           icon: Icons.person_rounded,
           validator: _requiredMin2,
         ),
@@ -156,7 +146,7 @@ class _AuthScreenState extends State<AuthScreen> {
       fields.add(
         _TextInput(
           controller: _codeController,
-          label: 'Ma 6 so',
+          label: 'Mã 6 số',
           icon: Icons.pin_rounded,
           keyboardType: TextInputType.number,
           validator: _codeValidator,
@@ -170,7 +160,7 @@ class _AuthScreenState extends State<AuthScreen> {
       fields.add(
         _TextInput(
           controller: _passwordController,
-          label: _mode == _AuthMode.reset ? 'Mat khau moi' : 'Mat khau',
+          label: _mode == _AuthMode.reset ? 'Mật khẩu mới' : 'Mật khẩu',
           icon: Icons.lock_rounded,
           obscureText: _obscurePassword,
           suffix: IconButton(
@@ -192,7 +182,7 @@ class _AuthScreenState extends State<AuthScreen> {
       fields.add(
         _TextInput(
           controller: _confirmPasswordController,
-          label: 'Nhap lai mat khau',
+          label: 'Nhập lại mật khẩu',
           icon: Icons.lock_reset_rounded,
           obscureText: true,
           validator: _confirmPasswordValidator,
@@ -203,11 +193,11 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   String get _primaryLabel => switch (_mode) {
-    _AuthMode.login => 'Dang nhap',
-    _AuthMode.register => 'Dang ky',
-    _AuthMode.verify => 'Xac thuc',
-    _AuthMode.forgot => 'Gui ma',
-    _AuthMode.reset => 'Dat lai mat khau',
+    _AuthMode.login => 'Đăng nhập',
+    _AuthMode.register => 'Đăng ký',
+    _AuthMode.verify => 'Xác thực',
+    _AuthMode.forgot => 'Gửi mã',
+    _AuthMode.reset => 'Đặt lại mật khẩu',
   };
 
   Future<void> _submit(AuthProvider auth) async {
@@ -230,7 +220,9 @@ class _AuthScreenState extends State<AuthScreen> {
         case _AuthMode.forgot:
           await auth.forgotPassword(email);
           _changeMode(_AuthMode.reset);
-          setState(() => _notice = 'Neu email ton tai, ma dat lai mat khau da duoc gui.');
+          setState(() {
+            _notice = 'Nếu email tồn tại, mã đặt lại mật khẩu đã được gửi.';
+          });
         case _AuthMode.reset:
           await auth.resetPassword(
             email: email,
@@ -261,34 +253,65 @@ class _AuthScreenState extends State<AuthScreen> {
 
   String? _emailValidator(String? value) {
     final text = value?.trim() ?? '';
-    if (text.isEmpty) return 'Vui long nhap email';
-    if (!text.contains('@') || !text.contains('.')) return 'Email khong hop le';
+    if (text.isEmpty) return 'Vui lòng nhập email';
+    if (!text.contains('@') || !text.contains('.')) return 'Email không hợp lệ';
     return null;
   }
 
   String? _requiredMin2(String? value) {
-    if ((value ?? '').trim().length < 2) return 'Toi thieu 2 ky tu';
+    if ((value ?? '').trim().length < 2) return 'Tối thiểu 2 ký tự';
     return null;
   }
 
   String? _passwordValidator(String? value) {
     final text = value ?? '';
-    if (text.length < 8) return 'Mat khau toi thieu 8 ky tu';
+    if (text.length < 8) return 'Mật khẩu tối thiểu 8 ký tự';
     if (!RegExp(r'[A-Za-z]').hasMatch(text) || !RegExp(r'\d').hasMatch(text)) {
-      return 'Can co chu va so';
+      return 'Cần có chữ và số';
     }
     return null;
   }
 
   String? _confirmPasswordValidator(String? value) {
-    if (value != _passwordController.text) return 'Mat khau khong khop';
+    if (value != _passwordController.text) return 'Mật khẩu không khớp';
     return null;
   }
 
   String? _codeValidator(String? value) {
     final text = value?.trim() ?? '';
-    if (!RegExp(r'^\d{6}$').hasMatch(text)) return 'Nhap dung ma 6 so';
+    if (!RegExp(r'^\d{6}$').hasMatch(text)) return 'Nhập đúng mã 6 số';
     return null;
+  }
+}
+
+class _AuthBrandMark extends StatelessWidget {
+  const _AuthBrandMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: 74,
+        height: 74,
+        decoration: BoxDecoration(
+          color: AppColors.primarySoft,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.12),
+              blurRadius: 22,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: const Icon(
+          Icons.travel_explore_rounded,
+          color: AppColors.primary,
+          size: 38,
+        ),
+      ),
+    );
   }
 }
 
@@ -346,22 +369,18 @@ class _ModeLinks extends StatelessWidget {
         if (mode != _AuthMode.login)
           TextButton(
             onPressed: () => onModeChanged(_AuthMode.login),
-            child: const Text('Dang nhap'),
+            child: const Text('Đăng nhập'),
           ),
         if (mode != _AuthMode.register)
           TextButton(
             onPressed: () => onModeChanged(_AuthMode.register),
-            child: const Text('Dang ky'),
+            child: const Text('Đăng ký'),
           ),
         if (mode == _AuthMode.login)
           TextButton(
             onPressed: () => onModeChanged(_AuthMode.forgot),
-            child: const Text('Quen mat khau'),
+            child: const Text('Quên mật khẩu'),
           ),
-        TextButton(
-          onPressed: () => onModeChanged(_AuthMode.verify),
-          child: const Text('Nhap ma xac thuc'),
-        ),
       ],
     );
   }
@@ -377,23 +396,65 @@ class _MessageBox extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: isError
-            ? Colors.red.withValues(alpha: 0.08)
+            ? Colors.red.withValues(alpha: 0.07)
             : AppColors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: isError
-              ? Colors.red.withValues(alpha: 0.18)
-              : AppColors.primary.withValues(alpha: 0.18),
+              ? Colors.red.withValues(alpha: 0.22)
+              : AppColors.primary.withValues(alpha: 0.2),
         ),
       ),
-      child: Text(
-        message,
-        style: AppTextStyles.caption.copyWith(
-          color: isError ? Colors.red.shade700 : AppColors.primaryDark,
-        ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: isError
+                  ? Colors.red.withValues(alpha: 0.12)
+                  : AppColors.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              isError
+                  ? Icons.error_outline_rounded
+                  : Icons.check_circle_outline_rounded,
+              color: isError ? Colors.red.shade700 : AppColors.primaryDark,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isError ? 'Không thành công' : 'Thông báo',
+                  style: AppTextStyles.title.copyWith(
+                    fontSize: 14,
+                    color: isError
+                        ? Colors.red.shade700
+                        : AppColors.primaryDark,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  message,
+                  style: AppTextStyles.caption.copyWith(
+                    color: isError
+                        ? Colors.red.shade700
+                        : AppColors.primaryDark,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
