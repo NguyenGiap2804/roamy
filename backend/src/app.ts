@@ -5,6 +5,8 @@ import helmet from 'helmet';
 import path from 'path';
 
 import { adminRoutes } from './modules/admin/admin.routes';
+import { authRoutes, meRoutes } from './modules/auth/auth.routes';
+import { authenticateUser, optionalUser } from './modules/auth/auth.middleware';
 import { categoryRoutes } from './modules/category/category.routes';
 import { eventRoutes } from './modules/events/event.routes';
 import { placeRoutes } from './modules/place/place.routes';
@@ -43,11 +45,13 @@ app.get('/health', (_req, res) => {
   });
 });
 
-app.use('/api/v1/categories', categoryRoutes);
-app.use('/api/v1/places', placeRoutes);
-app.use('/api/v1/schedules', scheduleRoutes);
-app.use('/api/v1/upload', uploadRoutes);
-app.use('/api/v1/events', eventRoutes);
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/me', meRoutes);
+app.use('/api/v1/categories', authenticateUser, categoryRoutes);
+app.use('/api/v1/places', authenticateUser, placeRoutes);
+app.use('/api/v1/schedules', authenticateUser, scheduleRoutes);
+app.use('/api/v1/upload', authenticateUser, uploadRoutes);
+app.use('/api/v1/events', optionalUser, eventRoutes);
 app.use('/api/v1/admin', adminRoutes);
 
 const adminDistPath = path.join(process.cwd(), 'admin', 'dist');

@@ -5,8 +5,10 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../models/place.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/category_provider.dart';
 import '../../providers/place_provider.dart';
+import '../../providers/schedule_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/place_card.dart';
@@ -46,8 +48,17 @@ class _MeScreenState extends State<MeScreen> {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Consumer3<PlaceProvider, CategoryProvider, ThemeProvider>(
-        builder: (context, placeProvider, categoryProvider, themeProvider, _) {
+      child:
+          Consumer4<PlaceProvider, CategoryProvider, ThemeProvider, AuthProvider>(
+        builder: (
+          context,
+          placeProvider,
+          categoryProvider,
+          themeProvider,
+          authProvider,
+          _,
+        ) {
+          final user = authProvider.user;
           final places = _filteredPlaces(placeProvider.places);
 
           return RefreshIndicator(
@@ -55,7 +66,6 @@ class _MeScreenState extends State<MeScreen> {
             child: ListView(
               padding: const EdgeInsets.all(AppSpacing.xl),
               children: [
-                // Header
                 Row(
                   children: [
                     CircleAvatar(
@@ -64,7 +74,7 @@ class _MeScreenState extends State<MeScreen> {
                           ? Colors.white10
                           : AppColors.primarySoft,
                       child: Text(
-                        'NG',
+                        _initials(user?.name ?? user?.email ?? 'R'),
                         style: AppTextStyles.title.copyWith(
                           color: themeProvider.isDarkMode
                               ? Colors.white
@@ -78,14 +88,16 @@ class _MeScreenState extends State<MeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Nguyên Giáp',
+                            user?.name.isNotEmpty == true
+                                ? user!.name
+                                : 'Roamy user',
                             style: AppTextStyles.headline.copyWith(
                               fontSize: 22,
                             ),
                           ),
                           const SizedBox(height: 4),
-                          const Text(
-                            'Khám phá thế giới cùng Roamy',
+                          Text(
+                            user?.email ?? 'Dang nhap Roamy',
                             style: AppTextStyles.subtitle,
                           ),
                         ],
@@ -102,18 +114,32 @@ class _MeScreenState extends State<MeScreen> {
                             : AppColors.textSecondary,
                       ),
                     ),
+                    IconButton(
+                      tooltip: 'Dang xuat',
+                      onPressed: authProvider.isBusy
+                          ? null
+                          : () async {
+                              context.read<PlaceProvider>().clear();
+                              context.read<CategoryProvider>().clear();
+                              context.read<ScheduleProvider>().clear();
+                              await context.read<AuthProvider>().logout();
+                            },
+                      icon: const Icon(Icons.logout_rounded),
+                    ),
                   ],
                 ),
+                if (user != null) ...[
+                  const SizedBox(height: 12),
+                  _ProfileStatus(emailVerified: user.emailVerified),
+                ],
                 const SizedBox(height: 22),
-
-                // Quick stats
                 Row(
                   children: [
                     Expanded(
                       child: _StatCard(
                         icon: Icons.place_rounded,
                         value: '${placeProvider.places.length}',
-                        label: 'Địa điểm',
+                        label: 'Dia diem',
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -121,7 +147,7 @@ class _MeScreenState extends State<MeScreen> {
                       child: _StatCard(
                         icon: Icons.category_rounded,
                         value: '${categoryProvider.categories.length}',
-                        label: 'Danh mục',
+                        label: 'Danh muc',
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -129,18 +155,16 @@ class _MeScreenState extends State<MeScreen> {
                       child: _StatCard(
                         icon: Icons.star_rounded,
                         value: _averageRating(placeProvider.places),
-                        label: 'Đánh giá TB',
+                        label: 'Rating TB',
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 24),
-
-                // Quick links
                 _QuickLinkTile(
                   icon: Icons.history_rounded,
-                  label: 'Lịch sử đã đi',
-                  subtitle: 'Xem những nơi bạn đã ghé thăm',
+                  label: 'Lich su da di',
+                  subtitle: 'Xem nhung noi ban da ghe tham',
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
@@ -150,33 +174,28 @@ class _MeScreenState extends State<MeScreen> {
                   },
                 ),
                 const SizedBox(height: 24),
-
-                // Saved places section
                 const SectionTitle(
-                  title: 'Địa điểm đã lưu',
+                  title: 'Dia diem da luu',
                   icon: Icons.bookmark_rounded,
                 ),
                 if (placeProvider.hasPendingSync) ...[
                   const SizedBox(height: 8),
                   Text(
-                    'Đang đồng bộ thay đổi...',
+                    'Dang dong bo thay doi...',
                     style: AppTextStyles.caption.copyWith(
                       color: AppColors.primaryDark,
                     ),
                   ),
                 ],
                 const SizedBox(height: 12),
-
-                // Search within saved places
                 TextField(
                   onChanged: (value) => setState(() => _searchQuery = value),
                   decoration: const InputDecoration(
-                    hintText: 'Tìm trong địa điểm đã lưu...',
+                    hintText: 'Tim trong dia diem da luu...',
                     prefixIcon: Icon(Icons.search_rounded),
                   ),
                 ),
                 const SizedBox(height: 14),
-
                 if (placeProvider.isLoading && placeProvider.places.isEmpty)
                   const Padding(
                     padding: EdgeInsets.only(top: 36),
@@ -185,14 +204,14 @@ class _MeScreenState extends State<MeScreen> {
                 else if (placeProvider.errorMessage != null)
                   EmptyState(
                     icon: Icons.cloud_off_rounded,
-                    title: 'Không thể tải địa điểm',
+                    title: 'Khong the tai dia diem',
                     message: placeProvider.errorMessage!,
                   )
                 else if (places.isEmpty)
                   const EmptyState(
                     icon: Icons.bookmark_border_rounded,
-                    title: 'Chưa có địa điểm nào',
-                    message: 'Thêm địa điểm từ trang chủ để bắt đầu.',
+                    title: 'Chua co dia diem nao',
+                    message: 'Them dia diem tu trang chu de bat dau.',
                   )
                 else
                   ...places.map(
@@ -230,6 +249,51 @@ class _MeScreenState extends State<MeScreen> {
     if (places.isEmpty) return '-';
     final sum = places.fold(0.0, (total, place) => total + place.rating);
     return (sum / places.length).toStringAsFixed(1);
+  }
+
+  String _initials(String value) {
+    final parts = value.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return 'R';
+    if (parts.length == 1) {
+      return parts.first.characters.first.toUpperCase();
+    }
+    return '${parts.first.characters.first}${parts.last.characters.first}'
+        .toUpperCase();
+  }
+}
+
+class _ProfileStatus extends StatelessWidget {
+  const _ProfileStatus({required this.emailVerified});
+
+  final bool emailVerified;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Theme.of(context).dividerColor),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            emailVerified
+                ? Icons.verified_rounded
+                : Icons.mark_email_unread_rounded,
+            color: emailVerified ? AppColors.primary : Colors.orange,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              emailVerified ? 'Email da xac thuc' : 'Email chua xac thuc',
+              style: AppTextStyles.caption,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

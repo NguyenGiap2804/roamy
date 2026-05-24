@@ -12,18 +12,18 @@ export class CategoryService {
     > = categoryRepository,
   ) {}
 
-  findAll() {
-    return this.repository.findAll();
+  findAll(userId?: string) {
+    return this.repository.findAll(userId);
   }
 
-  async create(data: CategoryCreateInput) {
-    const existingCategory = await this.repository.findByName(data.name);
+  async create(userId: string, data: CategoryCreateInput) {
+    const existingCategory = await this.repository.findByName(data.name, userId);
     if (existingCategory) {
       throw new ConflictError(_duplicateCategoryMessage(existingCategory.name));
     }
 
     try {
-      return await this.repository.create(data);
+      return await this.repository.create(userId, data);
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -36,14 +36,14 @@ export class CategoryService {
     }
   }
 
-  async update(id: string, data: CategoryUpdateInput) {
-    const current = await this.repository.findById(id);
+  async update(id: string, data: CategoryUpdateInput, userId?: string) {
+    const current = await this.repository.findById(id, userId);
     if (!current) {
       throw new NotFoundError('Category not found');
     }
 
     if (data.name && data.name.toLowerCase() !== current.name.toLowerCase()) {
-      const existingCategory = await this.repository.findByName(data.name);
+      const existingCategory = await this.repository.findByName(data.name, current.userId);
       if (existingCategory && existingCategory.id !== id) {
         throw new ConflictError(_duplicateCategoryMessage(existingCategory.name));
       }
@@ -65,8 +65,8 @@ export class CategoryService {
     }
   }
 
-  async delete(id: string) {
-    const current = await this.repository.findById(id);
+  async delete(id: string, userId?: string) {
+    const current = await this.repository.findById(id, userId);
     if (!current) {
       throw new NotFoundError('Category not found');
     }

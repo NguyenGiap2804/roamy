@@ -26,6 +26,7 @@ export function requestLogMiddleware(
       path: req.originalUrl,
       statusCode: res.statusCode,
       durationMs,
+      userId: req.userId ?? null,
       deviceId: req.deviceId,
       userAgent: req.get('user-agent') ?? null,
       ipAddress: req.ip,

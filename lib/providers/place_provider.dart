@@ -26,6 +26,18 @@ class PlaceProvider extends ChangeNotifier {
   bool get hasPendingSync => _pendingSyncCount > 0;
   bool get isEmpty => _places.isEmpty && !_isLoading && _errorMessage == null;
 
+  void clear() {
+    _places.clear();
+    _popularPlaces.clear();
+    _isLoading = false;
+    _errorMessage = null;
+    _pendingSyncCount = 0;
+    _lastPlacesFetchAt = null;
+    _lastPlacesCategoryId = null;
+    _placesFetchInFlight = null;
+    notifyListeners();
+  }
+
   Future<void> fetchPlaces({
     String? categoryId,
     bool forceRefresh = false,

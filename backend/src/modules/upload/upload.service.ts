@@ -130,6 +130,7 @@ export class UploadService {
       mimeType: file.mimetype,
       sizeBytes: file.size,
       originalName: file.originalname,
+      userId: context.userId,
       deviceId: context.deviceId,
       requestId: context.requestId,
     });
@@ -148,6 +149,7 @@ export class UploadService {
       mimeType: file.mimetype,
       sizeBytes: file.size,
       originalName: file.originalname,
+      userId: context.userId,
       deviceId: context.deviceId,
       requestId: context.requestId,
       errorMessage: error instanceof Error ? error.message : String(error),
@@ -158,6 +160,7 @@ export class UploadService {
 export const uploadService = new UploadService();
 
 type UploadRequestContext = {
+  userId?: string | null;
   deviceId?: string | null;
   requestId?: string | null;
 };

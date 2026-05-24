@@ -1,5 +1,6 @@
 import type {
   AdminSession,
+  AdminUser,
   ApiEnvelope,
   ApiErrorLog,
   ApiRequestLog,
@@ -82,6 +83,12 @@ export class AdminApi {
   uploads(query: QueryOptions) {
     return this.request<ListResponse<ImageAsset>>(
       `/admin/uploads${toSearch(query)}`,
+    );
+  }
+
+  users(query: QueryOptions) {
+    return this.request<ListResponse<AdminUser>>(
+      `/admin/users${toSearch(query)}`,
     );
   }
 

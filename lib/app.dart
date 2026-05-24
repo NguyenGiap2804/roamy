@@ -3,13 +3,16 @@ import 'package:provider/provider.dart';
 
 import 'core/network/api_client.dart';
 import 'core/theme/app_theme.dart';
+import 'providers/auth_provider.dart';
 import 'providers/category_provider.dart';
 import 'providers/explore_provider.dart';
 import 'providers/place_provider.dart';
 import 'providers/schedule_provider.dart';
 import 'providers/theme_provider.dart';
-import 'screens/splash_screen.dart';
+import 'screens/auth/auth_gate.dart';
 import 'services/category_service.dart';
+import 'services/auth_service.dart';
+import 'services/auth_token_store.dart';
 import 'services/device_identity_service.dart';
 import 'services/google_places_service.dart';
 import 'services/location_service.dart';
@@ -28,10 +31,30 @@ class RoamyApp extends StatelessWidget {
         Provider<DeviceIdentityService>.value(
           value: DeviceIdentityService.instance,
         ),
-        Provider<ApiClient>(
-          create: (context) => ApiClient(
+        Provider<AuthTokenStore>(create: (_) => AuthTokenStore()),
+        Provider<AuthService>(
+          create: (context) => AuthService(
+            tokenStore: context.read<AuthTokenStore>(),
             deviceIdProvider: context.read<DeviceIdentityService>().getDeviceId,
           ),
+        ),
+        ChangeNotifierProvider<AuthProvider>(
+          create: (context) => AuthProvider(
+            context.read<AuthService>(),
+            context.read<AuthTokenStore>(),
+          ),
+        ),
+        Provider<ApiClient>(
+          create: (context) {
+            final authProvider = context.read<AuthProvider>();
+            return ApiClient(
+              deviceIdProvider:
+                  context.read<DeviceIdentityService>().getDeviceId,
+              accessTokenProvider: () => authProvider.accessToken,
+              refreshSession: authProvider.refreshSession,
+              onSessionExpired: authProvider.forceLogout,
+            );
+          },
         ),
         Provider<TelemetryService>(
           create: (context) => TelemetryService(context.read<ApiClient>()),
@@ -94,7 +117,7 @@ class RoamyApp extends StatelessWidget {
             theme: AppTheme.light,
             darkTheme: AppTheme.dark,
             themeMode: themeProvider.themeMode,
-            home: const SplashScreen(),
+            home: const AuthGate(),
           );
         },
       ),

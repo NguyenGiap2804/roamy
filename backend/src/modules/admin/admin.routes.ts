@@ -26,6 +26,7 @@ adminRoutes.get('/activity', adminController.activity);
 adminRoutes.get('/errors', adminController.errors);
 adminRoutes.get('/requests', adminController.requests);
 adminRoutes.get('/uploads', adminController.uploads);
+adminRoutes.get('/users', adminController.users);
 adminRoutes.post('/images/check', adminController.checkImages);
 adminRoutes.get('/maintenance/retention/preview', adminController.retentionPreview);
 adminRoutes.post('/maintenance/retention/run', adminController.runRetention);

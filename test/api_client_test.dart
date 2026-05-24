@@ -30,4 +30,37 @@ void main() {
       });
     }
   });
+
+  test('ApiClient refreshes once on protected 401 and retries request', () async {
+    var calls = 0;
+    var token = 'expired-token';
+    final client = ApiClient(
+      baseUrl: 'https://example.com',
+      accessTokenProvider: () => token,
+      refreshSession: () async {
+        token = 'fresh-token';
+        return true;
+      },
+      client: MockClient((request) async {
+        calls += 1;
+        if (calls == 1) {
+          expect(request.headers['Authorization'], 'Bearer expired-token');
+          return http.Response(
+            '{"status":401,"message":"Unauthorized","data":null}',
+            401,
+          );
+        }
+        expect(request.headers['Authorization'], 'Bearer fresh-token');
+        return http.Response(
+          '{"status":200,"message":"ok","data":{"ok":true}}',
+          200,
+        );
+      }),
+    );
+
+    final response = await client.get('/places');
+
+    expect(response, {'ok': true});
+    expect(calls, 2);
+  });
 }

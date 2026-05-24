@@ -21,6 +21,15 @@ class ScheduleProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get hasPendingSync => _pendingSyncCount > 0;
 
+  void clear() {
+    _schedules.clear();
+    _isLoading = false;
+    _errorMessage = null;
+    _pendingSyncCount = 0;
+    _activeDateFilter = null;
+    notifyListeners();
+  }
+
   Future<void> fetchSchedules() async {
     _activeDateFilter = null;
     _setLoading(true);

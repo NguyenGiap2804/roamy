@@ -41,6 +41,7 @@ export class AdminService {
       totalPlaces,
       totalCategories,
       totalSchedules,
+      totalUsers,
       errorsToday,
       responseAggregate,
       uploadTotal,
@@ -55,6 +56,7 @@ export class AdminService {
       prisma.place.count(),
       prisma.category.count(),
       prisma.schedule.count(),
+      prisma.user.count(),
       prisma.apiErrorLog.count({ where: { createdAt: { gte: today } } }),
       prisma.apiRequestLog.aggregate({
         where: { createdAt: { gte: last24h } },
@@ -72,25 +74,29 @@ export class AdminService {
       prisma.systemEvent.findMany({
         orderBy: { createdAt: 'desc' },
         take: 12,
+        include: { user: { select: adminUserSelect } },
       }),
       prisma.apiErrorLog.findMany({
         orderBy: { createdAt: 'desc' },
         take: 8,
+        include: { user: { select: adminUserSelect } },
       }),
       prisma.place.findMany({
         orderBy: { createdAt: 'desc' },
         take: 8,
-        include: { category: true },
+        include: { category: true, user: { select: adminUserSelect } },
       }),
       prisma.apiRequestLog.findMany({
         where: { createdAt: { gte: last24h }, durationMs: { gte: 1000 } },
         orderBy: { createdAt: 'desc' },
         take: 8,
+        include: { user: { select: adminUserSelect } },
       }),
       prisma.imageAsset.findMany({
         where: { createdAt: { gte: last24h }, status: 'FAILED' },
         orderBy: { createdAt: 'desc' },
         take: 8,
+        include: { user: { select: adminUserSelect } },
       }),
     ]);
 
@@ -102,6 +108,7 @@ export class AdminService {
         totalPlaces,
         totalCategories,
         totalSchedules,
+        totalUsers,
         errorsToday,
         averageResponseMs: Math.round(responseAggregate._avg.durationMs ?? 0),
         uploadSuccessRate,
@@ -190,7 +197,7 @@ export class AdminService {
         skip,
         take,
         orderBy: { createdAt: 'desc' },
-        include: { category: true, schedules: true },
+        include: { category: true, schedules: true, user: { select: adminUserSelect } },
       }),
       page,
       limit,
@@ -220,7 +227,10 @@ export class AdminService {
         skip,
         take,
         orderBy: { createdAt: 'asc' },
-        include: { _count: { select: { places: true } } },
+        include: {
+          user: { select: adminUserSelect },
+          _count: { select: { places: true } },
+        },
       }),
       page,
       limit,
@@ -259,7 +269,10 @@ export class AdminService {
         skip,
         take,
         orderBy: [{ date: 'desc' }, { time: 'asc' }],
-        include: { place: { include: { category: true } } },
+        include: {
+          user: { select: adminUserSelect },
+          place: { include: { category: true, user: { select: adminUserSelect } } },
+        },
       }),
       page,
       limit,
@@ -304,6 +317,7 @@ export class AdminService {
         skip,
         take,
         orderBy: { createdAt: 'desc' },
+        include: { user: { select: adminUserSelect } },
       }),
       page,
       limit,
@@ -344,6 +358,7 @@ export class AdminService {
         skip,
         take,
         orderBy: { createdAt: 'desc' },
+        include: { user: { select: adminUserSelect } },
       }),
       page,
       limit,
@@ -383,6 +398,7 @@ export class AdminService {
         skip,
         take,
         orderBy: { createdAt: 'desc' },
+        include: { user: { select: adminUserSelect } },
       }),
       page,
       limit,
@@ -427,6 +443,56 @@ export class AdminService {
         skip,
         take,
         orderBy: { createdAt: 'desc' },
+        include: { user: { select: adminUserSelect } },
+      }),
+      page,
+      limit,
+    );
+  }
+
+  listUsers(options: AdminListOptions) {
+    const { skip, take, page, limit } = pagination(options);
+    const q = normalizedQuery(options.q);
+    const and: Prisma.UserWhereInput[] = [];
+
+    if (q) {
+      and.push({
+        OR: [
+          { email: { contains: q, mode: 'insensitive' } },
+          { name: { contains: q, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    const createdAt = dateTimeFilter(options);
+    if (createdAt) {
+      and.push({ createdAt });
+    }
+
+    const where = and.length > 0 ? { AND: and } : undefined;
+
+    return this.withTotal(
+      prisma.user.count({ where }),
+      prisma.user.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          ...adminUserSelect,
+          avatarUrl: true,
+          emailVerifiedAt: true,
+          lastLoginAt: true,
+          createdAt: true,
+          accounts: { select: { provider: true, createdAt: true } },
+          _count: {
+            select: {
+              categories: true,
+              places: true,
+              schedules: true,
+            },
+          },
+        },
       }),
       page,
       limit,
@@ -537,3 +603,9 @@ function hasCloudinaryConfig() {
       process.env.CLOUDINARY_API_SECRET,
   );
 }
+
+const adminUserSelect = {
+  id: true,
+  email: true,
+  name: true,
+} as const;

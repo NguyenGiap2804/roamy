@@ -13,6 +13,7 @@ import {
   Search,
   Settings,
   UploadCloud,
+  Users,
   UserRound,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -28,6 +29,7 @@ export type Section =
   | 'errors'
   | 'requests'
   | 'uploads'
+  | 'users'
   | 'health'
   | 'settings';
 
@@ -40,6 +42,7 @@ const navItems: Array<{ id: Section; label: string; icon: ReactNode }> = [
   { id: 'errors', label: 'Lỗi API', icon: <AlertTriangle size={18} /> },
   { id: 'requests', label: 'Request API', icon: <Database size={18} /> },
   { id: 'uploads', label: 'Upload ảnh', icon: <UploadCloud size={18} /> },
+  { id: 'users', label: 'Users', icon: <Users size={18} /> },
   { id: 'health', label: 'Sức khỏe', icon: <HeartPulse size={18} /> },
   { id: 'settings', label: 'Cài đặt', icon: <Settings size={18} /> },
 ];

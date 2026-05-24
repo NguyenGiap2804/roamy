@@ -1,4 +1,5 @@
 import { ConflictError, NotFoundError } from '../../utils/errors';
+import { categoryRepository } from '../category/category.repository';
 import { PlaceCreateInput, PlaceUpdateInput } from './place.model';
 import {
   DuplicatePlaceCandidate,
@@ -30,9 +31,11 @@ export class PlaceService {
       | 'delete'
       | 'findDuplicateCandidates'
     > = placeRepository,
+    private readonly categories: Pick<typeof categoryRepository, 'findById'> = categoryRepository,
   ) {}
 
   findAll(options?: {
+    userId?: string;
     categoryId?: string;
     sort?: 'rating' | 'createdAt';
     limit?: number;
@@ -40,40 +43,46 @@ export class PlaceService {
     return this.repository.findAll(options);
   }
 
-  async findById(id: string) {
-    const place = await this.repository.findById(id);
+  async findById(id: string, userId?: string) {
+    const place = await this.repository.findById(id, userId);
     if (!place) {
       throw new NotFoundError('Place not found');
     }
     return place;
   }
 
-  async create(data: PlaceCreateInput) {
-    await this.ensureNoDuplicatePlace(data);
-    return this.repository.create(data);
+  async create(userId: string, data: PlaceCreateInput) {
+    await this.ensureCategoryBelongsToUser(data.categoryId, userId);
+    await this.ensureNoDuplicatePlace(userId, data);
+    return this.repository.create(userId, data);
   }
 
-  async update(id: string, data: PlaceUpdateInput) {
-    const current = await this.findById(id);
+  async update(id: string, data: PlaceUpdateInput, userId?: string) {
+    const current = await this.findById(id, userId);
+    if (data.categoryId) {
+      await this.ensureCategoryBelongsToUser(data.categoryId, current.userId);
+    }
     if (_hasIdentityChanges(current, data)) {
-      await this.ensureNoDuplicatePlace(_mergeIdentity(current, data), id);
+      await this.ensureNoDuplicatePlace(current.userId, _mergeIdentity(current, data), id);
     }
     return this.repository.update(id, data);
   }
 
-  async delete(id: string) {
-    await this.findById(id);
+  async delete(id: string, userId?: string) {
+    await this.findById(id, userId);
     await this.repository.delete(id);
     return { id };
   }
 
   private async ensureNoDuplicatePlace(
+    userId: string,
     data: PlaceIdentitySnapshot,
     excludeId?: string,
   ) {
     const mapsUrlCandidates = _mapsUrlCandidates(data.mapsUrl);
     const candidates = await this.repository.findDuplicateCandidates({
       excludeId,
+      userId,
       name: data.name,
       address: data.address,
       mapsUrls: mapsUrlCandidates,
@@ -93,6 +102,13 @@ export class PlaceService {
         duplicateReason: duplicate.reason,
       },
     );
+  }
+
+  private async ensureCategoryBelongsToUser(categoryId: string, userId: string) {
+    const category = await this.categories.findById(categoryId, userId);
+    if (!category) {
+      throw new NotFoundError('Category not found');
+    }
   }
 }
 

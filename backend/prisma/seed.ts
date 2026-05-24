@@ -1,24 +1,36 @@
 import { PrismaClient, ScheduleStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();
+const seedUserId = '00000000-0000-4000-8000-000000000001';
 
 async function main() {
+  await prisma.user.upsert({
+    where: { id: seedUserId },
+    update: {},
+    create: {
+      id: seedUserId,
+      email: process.env.LEGACY_OWNER_EMAIL?.trim().toLowerCase() || 'legacy@roamy.local',
+      name: 'Roamy Legacy Owner',
+      emailVerifiedAt: new Date(),
+    },
+  });
+
   const cafe = await prisma.category.upsert({
-    where: { name: 'Cafe' },
+    where: { userId_name: { userId: seedUserId, name: 'Cafe' } },
     update: { icon: 'local_cafe' },
-    create: { name: 'Cafe', icon: 'local_cafe' },
+    create: { userId: seedUserId, name: 'Cafe', icon: 'local_cafe' },
   });
 
   const food = await prisma.category.upsert({
-    where: { name: 'Food' },
+    where: { userId_name: { userId: seedUserId, name: 'Food' } },
     update: { icon: 'restaurant' },
-    create: { name: 'Food', icon: 'restaurant' },
+    create: { userId: seedUserId, name: 'Food', icon: 'restaurant' },
   });
 
   const movie = await prisma.category.upsert({
-    where: { name: 'Movie' },
+    where: { userId_name: { userId: seedUserId, name: 'Movie' } },
     update: { icon: 'movie' },
-    create: { name: 'Movie', icon: 'movie' },
+    create: { userId: seedUserId, name: 'Movie', icon: 'movie' },
   });
 
   const themCafe = await prisma.place.upsert({
@@ -26,6 +38,7 @@ async function main() {
     update: {},
     create: {
       id: '11111111-1111-4111-8111-111111111111',
+      userId: seedUserId,
       name: 'Thêm Cafe',
       categoryId: cafe.id,
       address: '2HF2+43C, Tân Xã, Hạ Bằng, Hà Nội',
@@ -46,6 +59,7 @@ async function main() {
     update: {},
     create: {
       id: '22222222-2222-4222-8222-222222222222',
+      userId: seedUserId,
       name: 'Highland Coffee',
       categoryId: cafe.id,
       address: 'Hà Nội, Việt Nam',
@@ -66,6 +80,7 @@ async function main() {
     update: {},
     create: {
       id: '33333333-3333-4333-8333-333333333333',
+      userId: seedUserId,
       name: 'CGV Cinema',
       categoryId: movie.id,
       address: 'Vincom Center',
@@ -86,6 +101,7 @@ async function main() {
     update: {},
     create: {
       id: '44444444-4444-4444-8444-444444444444',
+      userId: seedUserId,
       placeId: themCafe.id,
       date: new Date('2026-04-28T00:00:00.000Z'),
       time: '09:30',
@@ -99,6 +115,7 @@ async function main() {
     update: {},
     create: {
       id: '55555555-5555-4555-8555-555555555555',
+      userId: seedUserId,
       placeId: cgv.id,
       date: new Date('2026-04-30T00:00:00.000Z'),
       time: '19:00',

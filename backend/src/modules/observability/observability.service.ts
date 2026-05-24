@@ -17,6 +17,7 @@ export type SystemEventInput = {
   screen?: string | null;
   message?: string | null;
   severity?: SystemEventSeverity;
+  userId?: string | null;
   deviceId?: string | null;
   requestId?: string | null;
   metadata?: unknown;
@@ -29,6 +30,7 @@ export type ApiRequestInput = {
   path: string;
   statusCode: number;
   durationMs: number;
+  userId?: string | null;
   deviceId?: string | null;
   userAgent?: string | null;
   ipAddress?: string | null;
@@ -43,6 +45,7 @@ export type ApiErrorInput = {
   name: string;
   message: string;
   details?: unknown;
+  userId?: string | null;
   deviceId?: string | null;
 };
 
@@ -53,6 +56,7 @@ export type ImageAssetInput = {
   mimeType?: string | null;
   sizeBytes?: number | null;
   originalName?: string | null;
+  userId?: string | null;
   deviceId?: string | null;
   requestId?: string | null;
   errorMessage?: string | null;
@@ -70,6 +74,7 @@ export class ObservabilityService {
           screen: input.screen ?? null,
           message: input.message ?? null,
           severity: input.severity ?? SystemEventSeverity.INFO,
+          userId: input.userId ?? null,
           deviceId: input.deviceId ?? null,
           requestId: input.requestId ?? null,
           metadata: toJsonInput(input.metadata),
@@ -88,6 +93,7 @@ export class ObservabilityService {
           path: input.path,
           statusCode: input.statusCode,
           durationMs: input.durationMs,
+          userId: input.userId ?? null,
           deviceId: input.deviceId ?? null,
           userAgent: input.userAgent ?? null,
           ipAddress: input.ipAddress ?? null,
@@ -113,6 +119,7 @@ export class ObservabilityService {
           name: input.name,
           message: input.message,
           details: toJsonInput(input.details),
+          userId: input.userId ?? null,
           deviceId: input.deviceId ?? null,
         },
       }),
@@ -129,6 +136,7 @@ export class ObservabilityService {
           mimeType: input.mimeType ?? null,
           sizeBytes: input.sizeBytes ?? null,
           originalName: input.originalName ?? null,
+          userId: input.userId ?? null,
           deviceId: input.deviceId ?? null,
           requestId: input.requestId ?? null,
           errorMessage: input.errorMessage ?? null,

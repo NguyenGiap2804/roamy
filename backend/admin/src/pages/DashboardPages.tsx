@@ -8,6 +8,7 @@ import {
 import type { QueryOptions } from '../api';
 import type {
   AdminSession,
+  AdminUser,
   ApiErrorLog,
   ApiRequestLog,
   Category,
@@ -47,6 +48,7 @@ export type DrawerState =
   | { kind: 'place'; item: Place }
   | { kind: 'category'; item: Category }
   | { kind: 'schedule'; item: Schedule }
+  | { kind: 'user'; item: AdminUser }
   | { kind: 'activity'; item: SystemEvent }
   | { kind: 'error'; item: ApiErrorLog }
   | { kind: 'request'; item: ApiRequestLog }
@@ -87,6 +89,7 @@ export function OverviewPage({
   return (
     <div className="grid-flow">
       <div className="kpi-grid">
+        <Kpi label="Users" value={kpis?.totalUsers ?? 0} />
         <Kpi label="Địa điểm" value={kpis?.totalPlaces ?? 0} />
         <Kpi label="Lỗi hôm nay" value={kpis?.errorsToday ?? 0} tone="danger" />
         <Kpi
@@ -574,6 +577,50 @@ export function UploadsPage({
             />,
             upload.sizeBytes ? `${Math.round(upload.sizeBytes / 1024)} KB` : '-',
             formatTime(upload.createdAt),
+          ],
+        }))}
+      />
+      <Pagination data={data} onPageChange={(page) => onFilterChange({ page })} />
+    </Panel>
+  );
+}
+
+export function UsersPage({
+  data,
+  filters,
+  onFilterChange,
+  onOpen,
+}: {
+  data: ListResponse<AdminUser>;
+  filters: ListFilters;
+  onFilterChange: FilterChange;
+  onOpen: (drawer: DrawerState) => void;
+}) {
+  return (
+    <Panel title="Users" subtitle={`${data.total} user`}>
+      <FilterBar>
+        <DateRangeFilters filters={filters} onFilterChange={onFilterChange} />
+      </FilterBar>
+      <DataTable
+        empty="Chua co user phu hop."
+        headers={[
+          'Email',
+          'Ten',
+          'Provider',
+          'Email',
+          'Du lieu',
+          'Lan dang nhap gan nhat',
+        ]}
+        rows={data.items.map((user) => ({
+          key: user.id,
+          onClick: () => onOpen({ kind: 'user', item: user }),
+          cells: [
+            <strong>{user.email}</strong>,
+            user.name,
+            user.accounts.map((account) => account.provider).join(', ') || '-',
+            user.emailVerifiedAt ? 'Verified' : 'Unverified',
+            `${user._count.places} places / ${user._count.schedules} schedules`,
+            user.lastLoginAt ? formatTime(user.lastLoginAt) : '-',
           ],
         }))}
       />

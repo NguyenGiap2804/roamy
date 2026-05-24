@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 
 import type { DrawerState } from '../pages/DashboardPages';
 import type {
+  AdminUser,
   Category,
   CategoryUpdatePayload,
   Place,
@@ -138,6 +139,8 @@ function DetailsView({ drawer }: { drawer: DrawerState }) {
       return <CategoryDetails category={drawer.item} />;
     case 'schedule':
       return <ScheduleDetails schedule={drawer.item} />;
+    case 'user':
+      return <UserDetails user={drawer.item} />;
     case 'activity':
       return (
         <div className="detail-grid">
@@ -218,6 +221,7 @@ function PlaceDetails({ place }: { place: Place }) {
     <div className="detail-stack">
       <PlacePreviewImage name={place.name} url={place.imageUrl} />
       <div className="detail-grid">
+        <Field label="User" value={userLabel(place.user)} />
         <Field label="Tên" value={place.name} />
         <Field label="Danh mục" value={place.category?.name ?? '-'} />
         <Field label="Rating" value={<Rating value={place.rating} />} />
@@ -238,6 +242,31 @@ function PlaceDetails({ place }: { place: Place }) {
         <Field label="Lịch trình" value={place.schedules?.length ?? 0} />
         <Field label="Ngày tạo" value={formatTime(place.createdAt)} />
       </div>
+    </div>
+  );
+}
+
+function UserDetails({ user }: { user: AdminUser }) {
+  return (
+    <div className="detail-grid">
+      <Field label="Email" value={user.email} />
+      <Field label="Name" value={user.name} />
+      <Field
+        label="Email verified"
+        value={user.emailVerifiedAt ? formatTime(user.emailVerifiedAt) : '-'}
+      />
+      <Field
+        label="Last login"
+        value={user.lastLoginAt ? formatTime(user.lastLoginAt) : '-'}
+      />
+      <Field
+        label="Providers"
+        value={user.accounts.map((account) => account.provider).join(', ') || '-'}
+      />
+      <Field label="Categories" value={user._count.categories} />
+      <Field label="Places" value={user._count.places} />
+      <Field label="Schedules" value={user._count.schedules} />
+      <Field label="Created" value={formatTime(user.createdAt)} />
     </div>
   );
 }
@@ -279,6 +308,7 @@ function CategoryDetails({ category }: { category: Category }) {
   return (
     <div className="detail-grid">
       <Field label="Icon" value={category.icon} />
+      <Field label="User" value={userLabel(category.user)} />
       <Field label="Tên" value={category.name} />
       <Field label="Số địa điểm" value={category._count?.places ?? 0} />
       <Field label="Ngày tạo" value={formatTime(category.createdAt)} />
@@ -289,6 +319,7 @@ function CategoryDetails({ category }: { category: Category }) {
 function ScheduleDetails({ schedule }: { schedule: Schedule }) {
   return (
     <div className="detail-grid">
+      <Field label="User" value={userLabel(schedule.user)} />
       <Field label="Địa điểm" value={schedule.place?.name ?? schedule.placeId} />
       <Field label="Ngày" value={formatDate(schedule.date)} />
       <Field label="Giờ" value={schedule.time} />
@@ -555,6 +586,10 @@ function ExternalUrl({ url }: { url?: string | null }) {
   );
 }
 
+function userLabel(user?: { email: string } | null) {
+  return user?.email ?? '-';
+}
+
 function drawerTitle(drawer: DrawerState) {
   switch (drawer.kind) {
     case 'place':
@@ -562,6 +597,8 @@ function drawerTitle(drawer: DrawerState) {
       return drawer.item.name;
     case 'schedule':
       return drawer.item.place?.name ?? drawer.item.id;
+    case 'user':
+      return drawer.item.email;
     case 'error':
     case 'request':
       return drawer.item.path;
@@ -574,6 +611,7 @@ function drawerTitle(drawer: DrawerState) {
 
 function drawerSubtitle(drawer: DrawerState) {
   if (drawer.kind === 'place') return drawer.item.address;
+  if (drawer.kind === 'user') return drawer.item.name;
   if (drawer.kind === 'category') return `${drawer.item._count?.places ?? 0} địa điểm`;
   if (drawer.kind === 'schedule') return `${formatDate(drawer.item.date)} · ${drawer.item.time}`;
   if (drawer.kind === 'activity') return drawer.item.deviceId ?? 'Không có device id';

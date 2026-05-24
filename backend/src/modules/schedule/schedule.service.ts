@@ -4,31 +4,31 @@ import { ScheduleCreateInput, ScheduleUpdateInput } from './schedule.model';
 import { scheduleRepository } from './schedule.repository';
 
 export class ScheduleService {
-  findAll(date?: string) {
-    return scheduleRepository.findAll(date);
+  findAll(userId: string, date?: string) {
+    return scheduleRepository.findAll(userId, date);
   }
 
-  async findById(id: string) {
-    const schedule = await scheduleRepository.findById(id);
+  async findById(id: string, userId?: string) {
+    const schedule = await scheduleRepository.findById(id, userId);
     if (!schedule) {
       throw new NotFoundError('Schedule not found');
     }
     return schedule;
   }
 
-  async create(data: ScheduleCreateInput) {
-    const place = await placeRepository.findById(data.placeId);
+  async create(userId: string, data: ScheduleCreateInput) {
+    const place = await placeRepository.findById(data.placeId, userId);
     if (!place) {
       throw new NotFoundError('Place not found');
     }
-    return scheduleRepository.create(data);
+    return scheduleRepository.create(userId, data);
   }
 
-  async update(id: string, data: ScheduleUpdateInput) {
-    await this.findById(id);
+  async update(id: string, data: ScheduleUpdateInput, userId?: string) {
+    const current = await this.findById(id, userId);
 
     if (data.placeId) {
-      const place = await placeRepository.findById(data.placeId);
+      const place = await placeRepository.findById(data.placeId, current.userId);
       if (!place) {
         throw new NotFoundError('Place not found');
       }
@@ -37,8 +37,8 @@ export class ScheduleService {
     return scheduleRepository.update(id, data);
   }
 
-  async delete(id: string) {
-    await this.findById(id);
+  async delete(id: string, userId?: string) {
+    await this.findById(id, userId);
     await scheduleRepository.delete(id);
     return { id };
   }

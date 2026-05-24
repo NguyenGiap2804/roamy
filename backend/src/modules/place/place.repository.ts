@@ -3,6 +3,7 @@ import { PlaceCreateInput, PlaceUpdateInput } from './place.model';
 
 export type DuplicatePlaceLookupInput = {
   excludeId?: string;
+  userId: string;
   name?: string;
   address?: string;
   mapsUrls?: string[];
@@ -23,13 +24,17 @@ export class PlaceRepository {
   private static readonly duplicateCoordinateWindow = 0.001;
 
   findAll(options?: {
+    userId?: string;
     categoryId?: string;
     sort?: 'rating' | 'createdAt';
     limit?: number;
   }) {
-    const { categoryId, sort, limit } = options ?? {};
+    const { userId, categoryId, sort, limit } = options ?? {};
     return prisma.place.findMany({
-      where: categoryId ? { categoryId } : undefined,
+      where: {
+        ...(userId ? { userId } : {}),
+        ...(categoryId ? { categoryId } : {}),
+      },
       orderBy: sort === 'rating'
         ? { rating: 'desc' }
         : { createdAt: 'desc' },
@@ -38,17 +43,21 @@ export class PlaceRepository {
     });
   }
 
-  findById(id: string) {
-    return prisma.place.findUnique({
+  findById(id: string, userId?: string) {
+    return userId ? prisma.place.findFirst({
+      where: { id, userId },
+      include: { category: true, schedules: true },
+    }) : prisma.place.findUnique({
       where: { id },
       include: { category: true, schedules: true },
     });
   }
 
-  create(data: PlaceCreateInput) {
+  create(userId: string, data: PlaceCreateInput) {
     return prisma.place.create({
       data: {
         ...data,
+        userId,
         priceRange: data.priceRange ?? '',
         openingHours: data.openingHours ?? '',
       },
@@ -76,6 +85,7 @@ export class PlaceRepository {
 
   async findDuplicateCandidates({
     excludeId,
+    userId,
     name,
     address,
     mapsUrls,
@@ -139,6 +149,7 @@ export class PlaceRepository {
 
     return prisma.place.findMany({
       where: {
+        userId,
         ...(excludeId ? { NOT: { id: excludeId } } : {}),
         OR: orConditions,
       },

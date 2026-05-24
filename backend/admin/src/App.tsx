@@ -16,9 +16,11 @@ import {
   SchedulesPage,
   SettingsPage,
   UploadsPage,
+  UsersPage,
 } from './pages/DashboardPages';
 import type {
   AdminSession,
+  AdminUser,
   ApiErrorLog,
   ApiRequestLog,
   Category,
@@ -50,6 +52,7 @@ type ListState = {
   errors: ListResponse<ApiErrorLog>;
   requests: ListResponse<ApiRequestLog>;
   uploads: ListResponse<ImageAsset>;
+  users: ListResponse<AdminUser>;
 };
 
 const sessionKey = 'roamy-admin-session';
@@ -68,6 +71,7 @@ const emptyLists: ListState = {
   errors: emptyList(),
   requests: emptyList(),
   uploads: emptyList(),
+  users: emptyList(),
 };
 
 export function App() {
@@ -191,6 +195,9 @@ export function App() {
         } else if (active === 'uploads') {
           const uploads = await api.uploads(listQuery(active));
           setLists((current) => ({ ...current, uploads }));
+        } else if (active === 'users') {
+          const users = await api.users(listQuery(active));
+          setLists((current) => ({ ...current, users }));
         }
 
         if (active !== 'overview' && active !== 'health' && active !== 'settings') {
@@ -441,6 +448,16 @@ export function App() {
           isCheckingImages={checkingImages}
           onCheckImages={() => void checkImages()}
           onFilterChange={(patch) => changeFilters('uploads', patch)}
+          onOpen={setDrawer}
+        />
+      );
+    }
+    if (active === 'users') {
+      return (
+        <UsersPage
+          data={lists.users}
+          filters={sectionFilters('users')}
+          onFilterChange={(patch) => changeFilters('users', patch)}
           onOpen={setDrawer}
         />
       );

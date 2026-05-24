@@ -7,16 +7,95 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id              String       @id @default(uuid())
+  email           String       @unique
+  name            String
+  avatarUrl       String?
+  passwordHash    String?
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  accounts        AuthAccount[]
+  refreshTokens   RefreshToken[]
+  emailTokens     EmailToken[]
+  categories      Category[]
+  places          Place[]
+  schedules       Schedule[]
+  systemEvents    SystemEvent[]
+  apiRequestLogs  ApiRequestLog[]
+  apiErrorLogs    ApiErrorLog[]
+  imageAssets     ImageAsset[]
+
+  @@index([createdAt])
+  @@index([lastLoginAt])
+}
+
+model AuthAccount {
+  id                String       @id @default(uuid())
+  userId            String
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider          AuthProvider
+  providerAccountId String
+  email             String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model RefreshToken {
+  id                String    @id @default(uuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash         String    @unique
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  replacedByTokenId String?
+  deviceId          String?
+  userAgent         String?
+  ipAddress         String?
+  createdAt         DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([revokedAt])
+}
+
+model EmailToken {
+  id         String         @id @default(uuid())
+  userId     String
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       EmailTokenType
+  codeHash   String
+  attempts   Int            @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime       @default(now())
+
+  @@index([userId, type, createdAt])
+  @@index([expiresAt])
+}
+
 model Category {
   id        String   @id @default(uuid())
-  name      String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
   icon      String
   createdAt DateTime @default(now())
   places    Place[]
+
+  @@unique([userId, name])
+  @@index([userId])
 }
 
 model Place {
   id           String     @id @default(uuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   name         String
   categoryId   String
   category     Category   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
@@ -35,6 +114,10 @@ model Place {
   createdAt    DateTime   @default(now())
   schedules    Schedule[]
 
+  @@index([userId])
+  @@index([userId, categoryId])
+  @@index([userId, createdAt])
+  @@index([userId, rating])
   @@index([categoryId])
   @@index([createdAt])
   @@index([rating])
@@ -42,6 +125,8 @@ model Place {
 
 model Schedule {
   id          String         @id @default(uuid())
+  userId      String
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   placeId     String
   place       Place          @relation(fields: [placeId], references: [id], onDelete: Cascade)
   date        DateTime       @db.Date
@@ -50,6 +135,8 @@ model Schedule {
   hasReminder Boolean        @default(false)
   createdAt   DateTime       @default(now())
 
+  @@index([userId])
+  @@index([userId, date])
   @@index([placeId])
   @@index([date])
 }
@@ -63,6 +150,8 @@ model SystemEvent {
   screen       String?
   message      String?
   severity     SystemEventSeverity @default(INFO)
+  userId       String?
+  user         User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
   deviceId     String?
   requestId    String?
   metadata     Json?
@@ -72,6 +161,7 @@ model SystemEvent {
   @@index([createdAt])
   @@index([occurredAt])
   @@index([type])
+  @@index([userId])
   @@index([deviceId])
   @@index([resourceType, resourceId])
 }
@@ -83,6 +173,8 @@ model ApiRequestLog {
   path           String
   statusCode     Int
   durationMs     Int
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   deviceId       String?
   userAgent      String?
   ipAddress      String?
@@ -93,6 +185,7 @@ model ApiRequestLog {
   @@index([createdAt])
   @@index([method])
   @@index([statusCode])
+  @@index([userId])
   @@index([deviceId])
 }
 
@@ -105,12 +198,15 @@ model ApiErrorLog {
   name       String
   message    String
   details    Json?
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   deviceId   String?
   createdAt  DateTime @default(now())
 
   @@index([createdAt])
   @@index([statusCode])
   @@index([path])
+  @@index([userId])
   @@index([deviceId])
 }
 
@@ -122,6 +218,8 @@ model ImageAsset {
   mimeType    String?
   sizeBytes   Int?
   originalName String?
+  userId       String?
+  user         User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
   deviceId    String?
   requestId   String?
   errorMessage String?
@@ -130,7 +228,18 @@ model ImageAsset {
   @@index([createdAt])
   @@index([storage])
   @@index([status])
+  @@index([userId])
   @@index([deviceId])
+}
+
+enum AuthProvider {
+  PASSWORD
+  GOOGLE
+}
+
+enum EmailTokenType {
+  VERIFY_EMAIL
+  RESET_PASSWORD
 }
 
 enum ScheduleStatus {

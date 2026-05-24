@@ -14,14 +14,17 @@ export type AdminSession = {
 
 export type Category = {
   id: string;
+  userId: string;
   name: string;
   icon: string;
   createdAt: string;
+  user?: UserSummary | null;
   _count?: { places: number };
 };
 
 export type Place = {
   id: string;
+  userId: string;
   name: string;
   categoryId: string;
   address: string;
@@ -36,19 +39,41 @@ export type Place = {
   latitude?: number | null;
   longitude?: number | null;
   createdAt: string;
+  user?: UserSummary | null;
   category?: Category | null;
   schedules?: Schedule[];
 };
 
 export type Schedule = {
   id: string;
+  userId: string;
   placeId: string;
   date: string;
   time: string;
   status: 'UPCOMING' | 'DONE' | 'CANCELLED';
   hasReminder: boolean;
   createdAt: string;
+  user?: UserSummary | null;
   place?: Place | null;
+};
+
+export type UserSummary = {
+  id: string;
+  email: string;
+  name: string;
+};
+
+export type AdminUser = UserSummary & {
+  avatarUrl?: string | null;
+  emailVerifiedAt?: string | null;
+  lastLoginAt?: string | null;
+  createdAt: string;
+  accounts: Array<{ provider: 'PASSWORD' | 'GOOGLE'; createdAt: string }>;
+  _count: {
+    categories: number;
+    places: number;
+    schedules: number;
+  };
 };
 
 export type SystemEvent = {
@@ -61,6 +86,7 @@ export type SystemEvent = {
   message?: string | null;
   severity: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
   deviceId?: string | null;
+  user?: UserSummary | null;
   requestId?: string | null;
   metadata?: unknown;
   occurredAt: string;
@@ -77,6 +103,7 @@ export type ApiErrorLog = {
   message: string;
   details?: unknown;
   deviceId?: string | null;
+  user?: UserSummary | null;
   createdAt: string;
 };
 
@@ -88,6 +115,7 @@ export type ApiRequestLog = {
   statusCode: number;
   durationMs: number;
   deviceId?: string | null;
+  user?: UserSummary | null;
   userAgent?: string | null;
   ipAddress?: string | null;
   query?: unknown;
@@ -104,6 +132,7 @@ export type ImageAsset = {
   sizeBytes?: number | null;
   originalName?: string | null;
   deviceId?: string | null;
+  user?: UserSummary | null;
   requestId?: string | null;
   errorMessage?: string | null;
   createdAt: string;
@@ -167,6 +196,7 @@ export type Overview = {
     totalPlaces: number;
     totalCategories: number;
     totalSchedules: number;
+    totalUsers: number;
     errorsToday: number;
     averageResponseMs: number;
     uploadSuccessRate: number;

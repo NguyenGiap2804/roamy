@@ -60,6 +60,10 @@ export class AdminController {
     adminService.listUploads(listOptions(req)),
   );
 
+  users = this.handle('Admin users fetched successfully', (req) =>
+    adminService.listUsers(listOptions(req)),
+  );
+
   retentionPreview = this.handle(
     'Admin retention preview fetched successfully',
     () => retentionService.preview(),

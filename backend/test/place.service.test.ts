@@ -4,6 +4,7 @@ import test from "node:test";
 import { PlaceService } from "../src/modules/place/place.service";
 import { ConflictError } from "../src/utils/errors";
 
+const userId = "user-1";
 const baseCreateInput = {
   name: "The Cofftea",
   categoryId: "11111111-1111-1111-1111-111111111111",
@@ -36,7 +37,7 @@ test("create rejects duplicate places that share the same Google Maps link", asy
 
   await assert.rejects(
     () =>
-      service.create({
+      service.create(userId, {
         ...baseCreateInput,
         mapsUrl:
           "https://www.google.com/maps/place/The+Cofftea/?hl=vi&entry=ttu",
@@ -67,7 +68,7 @@ test("create rejects near-identical place names at the same coordinates", async 
   });
 
   await assert.rejects(
-    () => service.create(baseCreateInput),
+    () => service.create(userId, baseCreateInput),
     (error: unknown) => {
       assert(error instanceof ConflictError);
       assert.equal(
@@ -95,7 +96,7 @@ test("create rejects same-name places with matching normalized addresses", async
 
   await assert.rejects(
     () =>
-      service.create({
+      service.create(userId, {
         ...baseCreateInput,
         mapsUrl: null,
         latitude: null,
@@ -143,7 +144,7 @@ test("create allows places that only share approximate coordinates", async () =>
     ],
   });
 
-  const created = await service.create(baseCreateInput);
+  const created = await service.create(userId, baseCreateInput);
 
   assert.equal(created.name, baseCreateInput.name);
 });
@@ -152,8 +153,9 @@ function createService(overrides: Partial<Record<string, unknown>> = {}) {
   const repository = {
     findAll: async () => [],
     findById: async () => createStoredPlace(),
-    create: async (data: typeof baseCreateInput) => ({
+    create: async (_userId: string, data: typeof baseCreateInput) => ({
       id: "new-place",
+      userId: _userId,
       ...data,
     }),
     update: async (id: string, data: Record<string, unknown>) => ({
@@ -166,12 +168,17 @@ function createService(overrides: Partial<Record<string, unknown>> = {}) {
     ...overrides,
   };
 
-  return new PlaceService(repository as never);
+  const categories = {
+    findById: async () => ({ id: baseCreateInput.categoryId }),
+  };
+
+  return new PlaceService(repository as never, categories as never);
 }
 
 function createStoredPlace() {
   return {
     id: "existing-place",
+    userId,
     ...baseCreateInput,
     category: null,
     schedules: [],

@@ -10,6 +10,7 @@ export class EventController {
       const body = req.body as EventCreateInput;
       await observabilityService.recordSystemEvent({
         ...body,
+        userId: req.userId ?? null,
         deviceId: body.deviceId ?? req.deviceId ?? null,
         requestId: req.requestId ?? null,
         metadata: sanitizeForLog(body.metadata),

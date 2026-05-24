@@ -9,10 +9,12 @@
     "build:admin": "npm --prefix admin ci --include=dev && npm --prefix admin run build",
     "postinstall": "prisma generate",
     "start": "node dist/src/server.js",
-    "deploy:start": "prisma migrate deploy && node dist/src/server.js",
+    "deploy:start": "prisma migrate deploy && npm run auth:backfill && node dist/src/server.js",
     "test": "tsx --test test/*.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "auth:backfill": "node dist/prisma/backfill-legacy-owner.js",
+    "auth:backfill:dev": "tsx prisma/backfill-legacy-owner.ts",
     "seed": "tsx prisma/seed.ts"
   },
   "prisma": {
@@ -27,12 +29,14 @@
   "license": "MIT",
   "dependencies": {
     "@prisma/client": "^6.19.0",
+    "bcryptjs": "^3.0.3",
     "cloudinary": "^2.10.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "helmet": "^8.1.0",
     "multer": "^2.1.1",
+    "nodemailer": "^8.0.8",
     "prisma": "^6.19.0",
     "uuid": "^14.0.0",
     "zod": "^4.1.12"
@@ -42,6 +46,7 @@
     "@types/express": "^5.0.5",
     "@types/multer": "^2.1.0",
     "@types/node": "^24.10.1",
+    "@types/nodemailer": "^8.0.0",
     "@types/uuid": "^10.0.0",
     "ts-node-dev": "^2.0.0",
     "tsx": "^4.20.6",

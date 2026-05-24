@@ -21,6 +21,15 @@ class CategoryProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
+  void clear() {
+    _categories.clear();
+    _isLoading = false;
+    _errorMessage = null;
+    _lastCategoriesFetchAt = null;
+    _categoriesFetchInFlight = null;
+    notifyListeners();
+  }
+
   Future<void> fetchCategories({bool forceRefresh = false}) async {
     if (!forceRefresh && _hasFreshCategoriesCache()) {
       return;

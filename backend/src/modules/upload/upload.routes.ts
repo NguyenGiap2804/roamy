@@ -45,6 +45,7 @@ export function createUploadHandler(service = uploadService) {
 
       const requestOrigin = `${req.protocol}://${req.get("host")}`;
       const url = await service.uploadImage(req.file, requestOrigin, {
+        userId: req.userId,
         deviceId: req.deviceId,
         requestId: req.requestId,
       });

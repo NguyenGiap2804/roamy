@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'main_navigation_screen.dart';
 import '../core/constants/app_colors.dart';
 import '../core/constants/app_spacing.dart';
 import '../core/constants/app_text_styles.dart';
@@ -25,13 +24,6 @@ class _SplashScreenState extends State<SplashScreen> {
           screen: 'splash',
         );
       } catch (_) {}
-    });
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
-        );
-      }
     });
   }
 

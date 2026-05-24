@@ -8,10 +8,10 @@ function toDateOnly(date: string) {
 }
 
 export class ScheduleRepository {
-  findAll(date?: string) {
+  findAll(userId: string, date?: string) {
     const where: Prisma.ScheduleWhereInput | undefined = date
-      ? { date: toDateOnly(date) }
-      : undefined;
+      ? { userId, date: toDateOnly(date) }
+      : { userId };
 
     return prisma.schedule.findMany({
       where,
@@ -20,17 +20,21 @@ export class ScheduleRepository {
     });
   }
 
-  findById(id: string) {
-    return prisma.schedule.findUnique({
+  findById(id: string, userId?: string) {
+    return userId ? prisma.schedule.findFirst({
+      where: { id, userId },
+      include: { place: { include: { category: true } } },
+    }) : prisma.schedule.findUnique({
       where: { id },
       include: { place: { include: { category: true } } },
     });
   }
 
-  create(data: ScheduleCreateInput) {
+  create(userId: string, data: ScheduleCreateInput) {
     return prisma.schedule.create({
       data: {
         ...data,
+        userId,
         date: toDateOnly(data.date),
       },
       include: { place: { include: { category: true } } },

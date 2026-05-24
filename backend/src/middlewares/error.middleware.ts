@@ -85,6 +85,7 @@ function logServerError(req: Request, error: Error) {
     name: error.name,
     message: error.message,
     details: sanitizeForLog(error instanceof AppError ? error.details : null),
+    userId: req.userId ?? null,
     deviceId: req.deviceId ?? null,
   });
 
