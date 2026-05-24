@@ -216,13 +216,7 @@ function DetailsView({ drawer }: { drawer: DrawerState }) {
 function PlaceDetails({ place }: { place: Place }) {
   return (
     <div className="detail-stack">
-      <div className="place-preview">
-        {place.imageUrl ? (
-          <img alt={place.name} src={place.imageUrl} />
-        ) : (
-          <div className="place-preview-fallback">Roamy</div>
-        )}
-      </div>
+      <PlacePreviewImage name={place.name} url={place.imageUrl} />
       <div className="detail-grid">
         <Field label="Tên" value={place.name} />
         <Field label="Danh mục" value={place.category?.name ?? '-'} />
@@ -244,6 +238,39 @@ function PlaceDetails({ place }: { place: Place }) {
         <Field label="Lịch trình" value={place.schedules?.length ?? 0} />
         <Field label="Ngày tạo" value={formatTime(place.createdAt)} />
       </div>
+    </div>
+  );
+}
+
+function PlacePreviewImage({
+  name,
+  url,
+}: {
+  name: string;
+  url?: string | null;
+}) {
+  const [failed, setFailed] = useState(false);
+  const hasImage = Boolean(url && !failed);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [url]);
+
+  return (
+    <div className="place-preview">
+      {hasImage ? (
+        <img
+          alt={name}
+          referrerPolicy="no-referrer"
+          src={url ?? undefined}
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <div className="place-preview-fallback">
+          <strong>{name}</strong>
+          <span>Chưa tải được ảnh</span>
+        </div>
+      )}
     </div>
   );
 }

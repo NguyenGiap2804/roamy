@@ -18,7 +18,15 @@ dotenv.config();
 
 export const app = express();
 
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        'img-src': ["'self'", 'data:', 'blob:', 'https:'],
+      },
+    },
+  }),
+);
 app.use(
   cors({
     origin: process.env.CORS_ORIGIN === '*' ? '*' : process.env.CORS_ORIGIN,

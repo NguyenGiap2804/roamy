@@ -571,12 +571,29 @@ code {
 
 .place-preview-fallback {
   display: grid;
+  gap: 6px;
   place-items: center;
+  align-content: center;
   width: 100%;
   height: 100%;
   color: #fff;
-  font-size: 30px;
+  padding: 24px;
+  text-align: center;
+}
+
+.place-preview-fallback strong {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 26px;
   font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.place-preview-fallback span {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .form-field {
