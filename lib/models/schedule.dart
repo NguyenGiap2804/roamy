@@ -7,11 +7,13 @@ const scheduleStatusCancelled = 'CANCELLED';
 class Schedule {
   const Schedule({
     required this.id,
-    required this.placeId,
     required this.date,
     required this.time,
     required this.status,
     required this.hasReminder,
+    this.placeId,
+    this.title,
+    this.note,
     this.placeName,
     this.category,
     this.address,
@@ -23,7 +25,9 @@ class Schedule {
   });
 
   final String id;
-  final String placeId;
+  final String? placeId;
+  final String? title;
+  final String? note;
   final DateTime date;
   final String time;
   final String status;
@@ -44,7 +48,9 @@ class Schedule {
         : null;
     return Schedule(
       id: json['id'] as String,
-      placeId: json['placeId'] as String,
+      placeId: json['placeId'] as String?,
+      title: json['title'] as String?,
+      note: json['note'] as String?,
       date: DateTime.parse(json['date'] as String),
       time: json['time'] as String,
       status: json['status'] as String,
@@ -81,16 +87,21 @@ class Schedule {
   Map<String, dynamic> toJson() {
     return {
       'placeId': placeId,
+      'title': title,
+      'note': note,
       'date': _dateToApi(date),
       'time': time,
       'status': status,
       'hasReminder': hasReminder,
+      'mapsUrl': mapsUrl,
     };
   }
 
   Schedule copyWith({
     String? id,
-    String? placeId,
+    Object? placeId = _unset,
+    Object? title = _unset,
+    Object? note = _unset,
     DateTime? date,
     String? time,
     String? status,
@@ -106,7 +117,9 @@ class Schedule {
   }) {
     return Schedule(
       id: id ?? this.id,
-      placeId: placeId ?? this.placeId,
+      placeId: identical(placeId, _unset) ? this.placeId : placeId as String?,
+      title: identical(title, _unset) ? this.title : title as String?,
+      note: identical(note, _unset) ? this.note : note as String?,
       date: date ?? this.date,
       time: time ?? this.time,
       status: status ?? this.status,
@@ -132,9 +145,19 @@ class Schedule {
     );
   }
 
-  String get displayPlaceName => placeName ?? 'Saved place';
+  String get displayPlaceName {
+    if (placeName?.trim().isNotEmpty == true) return placeName!;
+    if (title?.trim().isNotEmpty == true) return title!;
+    return 'Lịch trình nhanh';
+  }
+
   String get displayCategory => category ?? 'Other';
-  String get displayAddress => address ?? 'No address';
+  String get displayAddress {
+    if (address?.trim().isNotEmpty == true) return address!;
+    if (note?.trim().isNotEmpty == true) return note!;
+    return 'Chưa có ghi chú';
+  }
+
   String get displayOpeningHours =>
       openingHours?.trim().isNotEmpty == true ? openingHours! : time;
   bool get hasMapsUrl => mapsUrl?.trim().isNotEmpty == true;

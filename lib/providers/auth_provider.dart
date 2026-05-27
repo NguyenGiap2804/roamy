@@ -14,6 +14,7 @@ class AuthProvider extends ChangeNotifier {
 
   AuthUser? _user;
   String? _accessToken;
+  String? _refreshToken;
   bool _isInitializing = true;
   bool _isBusy = false;
   String? _errorMessage;
@@ -35,6 +36,8 @@ class AuthProvider extends ChangeNotifier {
       final accessToken = await _tokenStore.readAccessToken();
       final refreshToken = await _tokenStore.readRefreshToken();
       if (accessToken != null && refreshToken != null) {
+        _accessToken = accessToken;
+        _refreshToken = refreshToken;
         final refreshed = await refreshSession();
         if (!refreshed) {
           await _clearLocalSession();
@@ -48,13 +51,17 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> login(String email, String password) async {
+  Future<void> login(
+    String email,
+    String password, {
+    bool rememberAccount = false,
+  }) async {
     await _runBusy(() async {
       final session = await _authService.login(
         email: email,
         password: password,
       );
-      await _applySession(session);
+      await _applySession(session, rememberAccount: rememberAccount);
     });
   }
 
@@ -69,7 +76,7 @@ class AuthProvider extends ChangeNotifier {
         email: email,
         password: password,
       );
-      await _applySession(session);
+      await _applySession(session, rememberAccount: false);
       _pendingVerificationEmail = null;
     });
   }
@@ -77,7 +84,7 @@ class AuthProvider extends ChangeNotifier {
   Future<void> verifyEmail(String email, String code) async {
     await _runBusy(() async {
       final session = await _authService.verifyEmail(email: email, code: code);
-      await _applySession(session);
+      await _applySession(session, rememberAccount: false);
       _pendingVerificationEmail = null;
     });
   }
@@ -101,14 +108,14 @@ class AuthProvider extends ChangeNotifier {
         code: code,
         password: password,
       );
-      await _applySession(session);
+      await _applySession(session, rememberAccount: false);
     });
   }
 
-  Future<void> loginWithGoogle() async {
+  Future<void> loginWithGoogle({bool rememberAccount = false}) async {
     await _runBusy(() async {
       final session = await _authService.loginWithGoogle();
-      await _applySession(session);
+      await _applySession(session, rememberAccount: rememberAccount);
     });
   }
 
@@ -130,13 +137,14 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<bool> _refreshSessionInternal() async {
-    final refreshToken = await _tokenStore.readRefreshToken();
+    final refreshToken = _refreshToken ?? await _tokenStore.readRefreshToken();
     if (refreshToken == null || refreshToken.isEmpty) {
       return false;
     }
     try {
+      final shouldPersist = await _hasStoredRefreshToken();
       final session = await _authService.refresh(refreshToken);
-      await _applySession(session);
+      await _applySession(session, rememberAccount: shouldPersist);
       return true;
     } catch (_) {
       await _clearLocalSession();
@@ -146,7 +154,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    final refreshToken = await _tokenStore.readRefreshToken();
+    final refreshToken = _refreshToken ?? await _tokenStore.readRefreshToken();
     await _clearLocalSession();
     notifyListeners();
     unawaited(_authService.logout(refreshToken));
@@ -165,20 +173,34 @@ class AuthProvider extends ChangeNotifier {
     });
   }
 
-  Future<void> _applySession(AuthSession session) async {
+  Future<void> _applySession(
+    AuthSession session, {
+    required bool rememberAccount,
+  }) async {
     _user = session.user;
     _accessToken = session.accessToken;
-    await _tokenStore.saveTokens(
-      accessToken: session.accessToken,
-      refreshToken: session.refreshToken,
-    );
+    _refreshToken = session.refreshToken;
+    if (rememberAccount) {
+      await _tokenStore.saveTokens(
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+      );
+    } else {
+      await _tokenStore.clear();
+    }
   }
 
   Future<void> _clearLocalSession() async {
     _user = null;
     _accessToken = null;
+    _refreshToken = null;
     _pendingVerificationEmail = null;
     await _tokenStore.clear();
+  }
+
+  Future<bool> _hasStoredRefreshToken() async {
+    final stored = await _tokenStore.readRefreshToken();
+    return stored != null && stored.isNotEmpty;
   }
 
   Future<void> _runBusy(Future<void> Function() action) async {

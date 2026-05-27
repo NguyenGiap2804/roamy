@@ -300,7 +300,9 @@ class ScheduleProvider extends ChangeNotifier {
   }) {
     return Schedule(
       id: id,
-      placeId: (data['placeId'] as String?) ?? '',
+      placeId: _asNullableString(data['placeId']),
+      title: _asNullableString(data['title']),
+      note: _asNullableString(data['note']),
       date: _parseScheduleDate(data['date']) ?? DateTime.now(),
       time: (data['time'] as String?)?.trim() ?? '',
       status: (data['status'] as String?)?.trim().isNotEmpty == true
@@ -321,6 +323,12 @@ class ScheduleProvider extends ChangeNotifier {
   Schedule _mergeSchedule(Schedule schedule, Map<String, dynamic> data) {
     return schedule.copyWith(
       placeId: (data['placeId'] as String?) ?? schedule.placeId,
+      title: data.containsKey('title')
+          ? _asNullableString(data['title'])
+          : schedule.title,
+      note: data.containsKey('note')
+          ? _asNullableString(data['note'])
+          : schedule.note,
       date: data.containsKey('date')
           ? _parseScheduleDate(data['date']) ?? schedule.date
           : schedule.date,

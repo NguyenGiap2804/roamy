@@ -314,7 +314,7 @@ export function SchedulesPage({
           key: schedule.id,
           onClick: () => onOpen({ kind: "schedule", item: schedule }),
           cells: [
-            <strong>{schedule.place?.name ?? "-"}</strong>,
+            <strong>{schedule.place?.name ?? schedule.title ?? "-"}</strong>,
             formatDate(schedule.date),
             schedule.time,
             <StatusPill

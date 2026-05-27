@@ -47,7 +47,10 @@ export type Place = {
 export type Schedule = {
   id: string;
   userId: string;
-  placeId: string;
+  placeId?: string | null;
+  title?: string | null;
+  note?: string | null;
+  mapsUrl?: string | null;
   date: string;
   time: string;
   status: "UPCOMING" | "DONE" | "CANCELLED";
@@ -270,7 +273,10 @@ export type CategoryUpdatePayload = Partial<{
 }>;
 
 export type ScheduleUpdatePayload = Partial<{
-  placeId: string;
+  placeId: string | null;
+  title: string | null;
+  note: string | null;
+  mapsUrl: string | null;
   date: string;
   time: string;
   status: Schedule["status"];

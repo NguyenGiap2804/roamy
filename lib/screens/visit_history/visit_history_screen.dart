@@ -30,10 +30,14 @@ class _VisitHistoryScreenState extends State<VisitHistoryScreen> {
   }
 
   Future<void> _openPlace(Schedule schedule) async {
+    final placeId = schedule.placeId;
+    if (placeId == null || placeId.isEmpty) {
+      await _openMaps(schedule);
+      return;
+    }
+
     try {
-      final place = await context.read<PlaceProvider>().getPlaceById(
-        schedule.placeId,
-      );
+      final place = await context.read<PlaceProvider>().getPlaceById(placeId);
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => PlaceDetailScreen(place: place)),
@@ -76,6 +80,9 @@ class _VisitHistoryScreenState extends State<VisitHistoryScreen> {
     final nextVisit = DateTime.now().add(const Duration(days: 7));
     final payload = {
       'placeId': schedule.placeId,
+      'title': schedule.title,
+      'note': schedule.note,
+      'mapsUrl': schedule.mapsUrl,
       'date': _dateToApi(nextVisit),
       'time': schedule.time,
       'status': scheduleStatusUpcoming,
@@ -84,7 +91,6 @@ class _VisitHistoryScreenState extends State<VisitHistoryScreen> {
       'category': schedule.category,
       'address': schedule.address,
       'openingHours': schedule.openingHours,
-      'mapsUrl': schedule.mapsUrl,
       'latitude': schedule.latitude,
       'longitude': schedule.longitude,
     };

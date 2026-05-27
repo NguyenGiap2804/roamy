@@ -127,8 +127,11 @@ model Schedule {
   id          String         @id @default(uuid())
   userId      String
   user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  placeId     String
-  place       Place          @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  placeId     String?
+  place       Place?         @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  title       String?
+  note        String?
+  mapsUrl     String?
   date        DateTime       @db.Date
   time        String
   status      ScheduleStatus @default(UPCOMING)

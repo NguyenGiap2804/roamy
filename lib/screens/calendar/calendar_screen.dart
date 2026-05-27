@@ -182,6 +182,51 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
   }
 
+  Future<void> _openQuickScheduleCreator() async {
+    final drafts = await showModalBottomSheet<List<_QuickScheduleDraft>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => _QuickScheduleSheet(initialDate: _selectedDate),
+    );
+
+    if (!mounted || drafts == null || drafts.isEmpty) return;
+
+    final scheduleProvider = context.read<ScheduleProvider>();
+    final sortedDrafts = [...drafts]
+      ..sort((a, b) {
+        final dateCompare = a.date.compareTo(b.date);
+        if (dateCompare != 0) return dateCompare;
+        return (a.start.hour * 60 + a.start.minute).compareTo(
+          b.start.hour * 60 + b.start.minute,
+        );
+      });
+
+    try {
+      for (final draft in sortedDrafts) {
+        await scheduleProvider.createSchedule({
+          'title': draft.title,
+          'note': draft.note,
+          'mapsUrl': draft.mapsUrl,
+          'date': _dateToApi(draft.date),
+          'time': _timeRangeToApi(draft.start, draft.end),
+          'status': scheduleStatusUpcoming,
+          'hasReminder': false,
+        });
+      }
+      await scheduleProvider.fetchByDate(_selectedDate);
+      if (!mounted) return;
+      SnackBarHelper.showSuccess(context, 'Đã thêm lịch trình nhanh');
+    } catch (error) {
+      if (!mounted) return;
+      SnackBarHelper.showError(context, error.toString());
+    }
+  }
+
   Future<void> _openScheduleMaps(
     BuildContext context,
     Schedule schedule,
@@ -310,6 +355,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 const SectionTitle(
                   title: 'Địa điểm đã lên lịch',
                   icon: Icons.event_note_rounded,
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openQuickScheduleCreator(),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Thêm nhanh'),
+                  ),
                 ),
                 if (scheduleProvider.hasPendingSync) ...[
                   const SizedBox(height: 8),
@@ -920,6 +974,437 @@ class _ScheduleQuickEditSheetState extends State<_ScheduleQuickEditSheet> {
   }
 }
 
+class _QuickScheduleDraft {
+  const _QuickScheduleDraft({
+    required this.date,
+    required this.start,
+    required this.end,
+    required this.title,
+    required this.note,
+    required this.mapsUrl,
+  });
+
+  final DateTime date;
+  final TimeOfDay start;
+  final TimeOfDay end;
+  final String title;
+  final String note;
+  final String mapsUrl;
+}
+
+class _QuickScheduleRow {
+  _QuickScheduleRow(DateTime date)
+    : date = DateTime(date.year, date.month, date.day);
+
+  DateTime date;
+  TimeOfDay start = const TimeOfDay(hour: 8, minute: 0);
+  TimeOfDay end = const TimeOfDay(hour: 9, minute: 0);
+  final titleController = TextEditingController();
+  final noteController = TextEditingController();
+  final mapsUrlController = TextEditingController();
+
+  void dispose() {
+    titleController.dispose();
+    noteController.dispose();
+    mapsUrlController.dispose();
+  }
+}
+
+class _QuickScheduleSheet extends StatefulWidget {
+  const _QuickScheduleSheet({required this.initialDate});
+
+  final DateTime initialDate;
+
+  @override
+  State<_QuickScheduleSheet> createState() => _QuickScheduleSheetState();
+}
+
+class _QuickScheduleSheetState extends State<_QuickScheduleSheet> {
+  late final List<_QuickScheduleRow> _rows = [
+    _QuickScheduleRow(widget.initialDate),
+  ];
+  String? _error;
+
+  @override
+  void dispose() {
+    for (final row in _rows) {
+      row.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.lg,
+        AppSpacing.xl,
+        MediaQuery.of(context).viewInsets.bottom +
+            MediaQuery.of(context).padding.bottom +
+            AppSpacing.xl,
+      ),
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.74,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Thêm lịch trình nhanh',
+                    style: AppTextStyles.headline.copyWith(fontSize: 22),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Nhập nhiều mốc thời gian, địa điểm và link Google Maps trong một lần.',
+              style: AppTextStyles.subtitle,
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                _error!,
+                style: AppTextStyles.caption.copyWith(color: AppColors.red),
+              ),
+            ],
+            const SizedBox(height: 14),
+            Expanded(
+              child: Scrollbar(
+                thumbVisibility: true,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: 900,
+                    child: ListView.separated(
+                      itemCount: _rows.length + 1,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        if (index == 0) return const _QuickScheduleHeader();
+                        final rowIndex = index - 1;
+                        return _QuickScheduleRowEditor(
+                          row: _rows[rowIndex],
+                          canDelete: _rows.length > 1,
+                          onChanged: () => setState(() {}),
+                          onDelete: () {
+                            setState(() {
+                              final row = _rows.removeAt(rowIndex);
+                              row.dispose();
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _addRow,
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Thêm dòng'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _submit,
+                    icon: const Icon(Icons.check_rounded),
+                    label: const Text('Lưu lịch trình'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _addRow() {
+    setState(() {
+      final seed = _rows.last;
+      final row = _QuickScheduleRow(seed.date)
+        ..start = seed.end
+        ..end = _defaultQuickEditEndTime(seed.end);
+      _rows.add(row);
+    });
+  }
+
+  void _submit() {
+    final drafts = <_QuickScheduleDraft>[];
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+
+    for (var index = 0; index < _rows.length; index++) {
+      final row = _rows[index];
+      final title = row.titleController.text.trim();
+      final note = row.noteController.text.trim();
+      final mapsUrl = row.mapsUrlController.text.trim();
+
+      if (row.date.isBefore(todayOnly)) {
+        _setError('Dòng ${index + 1}: ngày không được ở quá khứ.');
+        return;
+      }
+      if (title.isEmpty) {
+        _setError('Dòng ${index + 1}: nhập tên địa điểm.');
+        return;
+      }
+      if (!_isEndAfterStart(row.start, row.end)) {
+        _setError('Dòng ${index + 1}: giờ kết thúc phải sau giờ bắt đầu.');
+        return;
+      }
+      if (!_isValidMapUrl(mapsUrl)) {
+        _setError('Dòng ${index + 1}: nhập link Google Maps hợp lệ.');
+        return;
+      }
+
+      drafts.add(
+        _QuickScheduleDraft(
+          date: row.date,
+          start: row.start,
+          end: row.end,
+          title: title,
+          note: note.isEmpty ? title : note,
+          mapsUrl: mapsUrl,
+        ),
+      );
+    }
+
+    Navigator.of(context).pop(drafts);
+  }
+
+  void _setError(String value) {
+    setState(() => _error = value);
+  }
+
+  bool _isValidMapUrl(String value) {
+    final uri = Uri.tryParse(value);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) return false;
+    if (uri.scheme != 'http' && uri.scheme != 'https') return false;
+    return uri.host.contains('google.') ||
+        uri.host.contains('goo.gl') ||
+        uri.host.contains('maps.app.goo.gl');
+  }
+}
+
+class _QuickScheduleHeader extends StatelessWidget {
+  const _QuickScheduleHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: const [
+        SizedBox(width: 220, child: _QuickScheduleHeaderCell('Ngày giờ')),
+        SizedBox(width: 300, child: _QuickScheduleHeaderCell('Địa điểm')),
+        SizedBox(width: 300, child: _QuickScheduleHeaderCell('Link map')),
+        SizedBox(width: 48),
+      ],
+    );
+  }
+}
+
+class _QuickScheduleHeaderCell extends StatelessWidget {
+  const _QuickScheduleHeaderCell(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text(
+        label,
+        style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w800),
+      ),
+    );
+  }
+}
+
+class _QuickScheduleRowEditor extends StatelessWidget {
+  const _QuickScheduleRowEditor({
+    required this.row,
+    required this.canDelete,
+    required this.onChanged,
+    required this.onDelete,
+  });
+
+  final _QuickScheduleRow row;
+  final bool canDelete;
+  final VoidCallback onChanged;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 220,
+          child: Column(
+            children: [
+              _QuickPickerTile(
+                icon: Icons.event_rounded,
+                label: _formatScheduleDate(row.date),
+                onTap: () async {
+                  final now = DateTime.now();
+                  final today = DateTime(now.year, now.month, now.day);
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: row.date.isBefore(today) ? today : row.date,
+                    firstDate: today,
+                    lastDate: today.add(const Duration(days: 730)),
+                  );
+                  if (picked == null) return;
+                  row.date = DateTime(picked.year, picked.month, picked.day);
+                  onChanged();
+                },
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: _QuickPickerTile(
+                      icon: Icons.schedule_rounded,
+                      label: row.start.format(context),
+                      onTap: () => _pickTime(context, isStart: true),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _QuickPickerTile(
+                      icon: Icons.schedule_rounded,
+                      label: row.end.format(context),
+                      onTap: () => _pickTime(context, isStart: false),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        SizedBox(
+          width: 300,
+          child: Column(
+            children: [
+              TextField(
+                controller: row.titleController,
+                decoration: const InputDecoration(
+                  labelText: 'Tên địa điểm',
+                  prefixIcon: Icon(Icons.place_rounded),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: row.noteController,
+                minLines: 2,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Ghi chú, đánh giá, điều thú vị',
+                  prefixIcon: Icon(Icons.notes_rounded),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        SizedBox(
+          width: 300,
+          child: TextField(
+            controller: row.mapsUrlController,
+            keyboardType: TextInputType.url,
+            decoration: const InputDecoration(
+              labelText: 'Link Google Maps',
+              prefixIcon: Icon(Icons.link_rounded),
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 48,
+          child: IconButton(
+            onPressed: canDelete ? onDelete : null,
+            icon: const Icon(Icons.delete_outline_rounded),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickTime(BuildContext context, {required bool isStart}) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: isStart ? row.start : row.end,
+    );
+    if (picked == null) return;
+    if (isStart) {
+      row.start = picked;
+      if (!_isEndAfterStart(row.start, row.end)) {
+        row.end = _defaultQuickEditEndTime(row.start);
+      }
+    } else {
+      row.end = picked;
+    }
+    onChanged();
+  }
+}
+
+class _QuickPickerTile extends StatelessWidget {
+  const _QuickPickerTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          border: Border.all(color: Theme.of(context).dividerColor),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: AppColors.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.caption.copyWith(
+                  color: Theme.of(context).colorScheme.onSurface,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _QuickEditTimeTile extends StatelessWidget {
   const _QuickEditTimeTile({
     required this.label,
@@ -1034,6 +1519,12 @@ String _statusActionSuccessMessage(String status) {
 
 String _formatScheduleDate(DateTime date) {
   return '${date.day}/${date.month}/${date.year}';
+}
+
+String _dateToApi(DateTime date) {
+  final month = date.month.toString().padLeft(2, '0');
+  final day = date.day.toString().padLeft(2, '0');
+  return '${date.year}-$month-$day';
 }
 
 String _timeToApi(TimeOfDay time) {

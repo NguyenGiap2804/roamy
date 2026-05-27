@@ -9,12 +9,35 @@ const timeSchema = z
     'time must use HH:mm or HH:mm-HH:mm format',
   );
 
-const scheduleBaseSchema = z.object({
-  placeId: z.uuid('placeId must be a valid UUID'),
+const scheduleFieldsSchema = z.object({
+  placeId: z.uuid('placeId must be a valid UUID').optional().nullable(),
+  title: z.string().trim().optional().nullable(),
+  note: z.string().trim().optional().nullable(),
+  mapsUrl: z.url('mapsUrl must be a valid URL').optional().nullable(),
   date: dateSchema,
   time: timeSchema,
   status: z.enum(ScheduleStatus).default(ScheduleStatus.UPCOMING),
   hasReminder: z.boolean().default(false),
+});
+
+const scheduleBaseSchema = scheduleFieldsSchema.superRefine((value, ctx) => {
+  if (value.placeId) return;
+
+  if (!value.title?.trim()) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['title'],
+      message: 'title is required when placeId is not provided',
+    });
+  }
+
+  if (!value.mapsUrl?.trim()) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['mapsUrl'],
+      message: 'mapsUrl is required when placeId is not provided',
+    });
+  }
 });
 
 export const scheduleListSchema = z.object({
@@ -37,7 +60,7 @@ export const scheduleUpdateSchema = z.object({
   params: z.object({
     id: z.uuid('id must be a valid UUID'),
   }),
-  body: scheduleBaseSchema.partial().refine((value) => Object.keys(value).length > 0, {
+  body: scheduleFieldsSchema.partial().refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field is required',
   }),
 });

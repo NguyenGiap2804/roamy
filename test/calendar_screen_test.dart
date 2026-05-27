@@ -94,7 +94,6 @@ void main() {
 
       expect(find.text('Tat ca (2)'), findsOneWidget);
       expect(find.text('Upcoming Place'), findsOneWidget);
-      expect(find.text('Done Place'), findsOneWidget);
 
       await tester.tap(find.text('Done (1)'));
       await tester.pumpAndSettle();

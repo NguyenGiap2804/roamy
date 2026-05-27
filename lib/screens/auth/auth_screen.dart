@@ -25,6 +25,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
   _AuthMode _mode = _AuthMode.login;
   bool _obscurePassword = true;
+  bool _rememberAccount = false;
   String? _notice;
 
   @override
@@ -88,6 +89,13 @@ class _AuthScreenState extends State<AuthScreen> {
                     if (auth.errorMessage != null)
                       _MessageBox(message: auth.errorMessage!, isError: true),
                     ..._fieldsForMode(),
+                    if (_mode == _AuthMode.login)
+                      _RememberAccountCheckbox(
+                        value: _rememberAccount,
+                        onChanged: (value) {
+                          setState(() => _rememberAccount = value);
+                        },
+                      ),
                     const SizedBox(height: 18),
                     FilledButton(
                       onPressed: auth.isBusy ? null : () => _submit(auth),
@@ -208,7 +216,11 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       switch (_mode) {
         case _AuthMode.login:
-          await auth.login(email, _passwordController.text);
+          await auth.login(
+            email,
+            _passwordController.text,
+            rememberAccount: _rememberAccount,
+          );
         case _AuthMode.register:
           await auth.register(
             name: _nameController.text.trim(),
@@ -237,7 +249,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Future<void> _google(AuthProvider auth) async {
     try {
-      await auth.loginWithGoogle();
+      await auth.loginWithGoogle(rememberAccount: _rememberAccount);
     } catch (_) {}
   }
 
@@ -311,6 +323,28 @@ class _AuthBrandMark extends StatelessWidget {
           size: 38,
         ),
       ),
+    );
+  }
+}
+
+class _RememberAccountCheckbox extends StatelessWidget {
+  const _RememberAccountCheckbox({
+    required this.value,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return CheckboxListTile(
+      value: value,
+      onChanged: (next) => onChanged(next ?? false),
+      contentPadding: EdgeInsets.zero,
+      controlAffinity: ListTileControlAffinity.leading,
+      title: const Text('Ghi nhớ tài khoản'),
+      subtitle: const Text('Mở lại app sẽ tự đăng nhập trên thiết bị này.'),
     );
   }
 }

@@ -1,0 +1,7 @@
+ALTER TABLE "Schedule" ADD COLUMN "title" TEXT;
+ALTER TABLE "Schedule" ADD COLUMN "note" TEXT;
+ALTER TABLE "Schedule" ADD COLUMN "mapsUrl" TEXT;
+
+ALTER TABLE "Schedule" DROP CONSTRAINT "Schedule_placeId_fkey";
+ALTER TABLE "Schedule" ALTER COLUMN "placeId" DROP NOT NULL;
+ALTER TABLE "Schedule" ADD CONSTRAINT "Schedule_placeId_fkey" FOREIGN KEY ("placeId") REFERENCES "Place"("id") ON DELETE CASCADE ON UPDATE CASCADE;

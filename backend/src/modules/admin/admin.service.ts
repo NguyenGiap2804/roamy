@@ -451,6 +451,9 @@ export class AdminService {
         OR: [
           { place: { name: { contains: q, mode: "insensitive" } } },
           { place: { address: { contains: q, mode: "insensitive" } } },
+          { title: { contains: q, mode: "insensitive" } },
+          { note: { contains: q, mode: "insensitive" } },
+          { mapsUrl: { contains: q, mode: "insensitive" } },
         ],
       });
     }

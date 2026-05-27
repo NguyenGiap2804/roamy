@@ -113,6 +113,9 @@ class ScheduleService {
 Map<String, dynamic> _apiPayload(Map<String, dynamic> data) {
   return {
     if (data.containsKey('placeId')) 'placeId': data['placeId'],
+    if (data.containsKey('title')) 'title': data['title'],
+    if (data.containsKey('note')) 'note': data['note'],
+    if (data.containsKey('mapsUrl')) 'mapsUrl': data['mapsUrl'],
     if (data.containsKey('date')) 'date': data['date'],
     if (data.containsKey('time')) 'time': data['time'],
     if (data.containsKey('status')) 'status': data['status'],

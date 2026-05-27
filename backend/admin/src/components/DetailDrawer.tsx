@@ -383,7 +383,7 @@ function UserDetails({
             empty="User chưa có lịch trình."
             items={detail.schedules.map((schedule) => ({
               id: schedule.id,
-              title: schedule.place?.name ?? schedule.placeId,
+              title: schedule.place?.name ?? schedule.title ?? schedule.placeId ?? "Lá»‹ch nhanh",
               meta: `${formatDate(schedule.date)} · ${schedule.time} · ${schedule.status}`,
             }))}
           />
@@ -503,8 +503,10 @@ function ScheduleDetails({ schedule }: { schedule: Schedule }) {
       <Field label="User" value={userLabel(schedule.user)} />
       <Field
         label="Địa điểm"
-        value={schedule.place?.name ?? schedule.placeId}
+        value={schedule.place?.name ?? schedule.title ?? schedule.placeId ?? "-"}
       />
+      <Field label="Ghi chÃº" value={schedule.note ?? "-"} />
+      <Field label="Google Maps" value={schedule.mapsUrl ?? schedule.place?.mapsUrl ?? "-"} />
       <Field label="Ngày" value={formatDate(schedule.date)} />
       <Field label="Giờ" value={schedule.time} />
       <Field
@@ -789,7 +791,10 @@ function ScheduleEditor({
   onDelete: () => Promise<void>;
 }) {
   const [form, setForm] = useState({
-    placeId: schedule.placeId,
+    placeId: schedule.placeId ?? "",
+    title: schedule.title ?? "",
+    note: schedule.note ?? "",
+    mapsUrl: schedule.mapsUrl ?? "",
     date: toDateInput(schedule.date),
     time: schedule.time,
     status: schedule.status,
@@ -805,7 +810,13 @@ function ScheduleEditor({
     event.preventDefault();
     setError(null);
     try {
-      await onSave(form);
+      await onSave({
+        ...form,
+        placeId: nullableText(form.placeId),
+        title: nullableText(form.title),
+        note: nullableText(form.note),
+        mapsUrl: nullableText(form.mapsUrl),
+      });
     } catch (saveError) {
       setError(
         saveError instanceof Error ? saveError.message : "Không thể lưu",
@@ -822,12 +833,31 @@ function ScheduleEditor({
             setForm({ ...form, placeId: event.target.value })
           }
         >
+          <option value="">Lá»‹ch nhanh khÃ´ng gáº¯n Ä‘á»‹a Ä‘iá»ƒm</option>
           {selectablePlaces.map((place) => (
             <option key={place.id} value={place.id}>
               {place.name}
             </option>
           ))}
         </select>
+      </FormField>
+      <FormField label="TiÃªu Ä‘á» lá»‹ch nhanh">
+        <input
+          value={form.title}
+          onChange={(event) => setForm({ ...form, title: event.target.value })}
+        />
+      </FormField>
+      <FormField label="Ghi chÃº">
+        <textarea
+          value={form.note}
+          onChange={(event) => setForm({ ...form, note: event.target.value })}
+        />
+      </FormField>
+      <FormField label="Google Maps">
+        <input
+          value={form.mapsUrl}
+          onChange={(event) => setForm({ ...form, mapsUrl: event.target.value })}
+        />
       </FormField>
       <FormField label="Ngày">
         <input

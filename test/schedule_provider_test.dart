@@ -38,6 +38,45 @@ void main() {
   );
 
   test(
+    'createSchedule supports quick schedules without a saved place',
+    () async {
+      final provider = ScheduleProvider(
+        _FakeScheduleService(
+          createHandler: (data) async => Schedule(
+            id: 'quick-schedule-1',
+            date: DateTime.parse(data['date'] as String),
+            time: data['time'] as String,
+            status: data['status'] as String,
+            hasReminder: data['hasReminder'] as bool,
+            title: data['title'] as String,
+            note: data['note'] as String,
+            mapsUrl: data['mapsUrl'] as String,
+          ),
+        ),
+        _FakeNotificationGateway(),
+      );
+
+      final created = await provider.createSchedule({
+        'title': 'AN cafe',
+        'note': 'View dep, ca phe on',
+        'mapsUrl': 'https://maps.app.goo.gl/abc123',
+        'date': '2099-01-10',
+        'time': '10:00-11:00',
+        'status': scheduleStatusUpcoming,
+        'hasReminder': false,
+      });
+
+      expect(created.placeId, isNull);
+      expect(provider.schedules.single.displayPlaceName, 'AN cafe');
+      expect(provider.schedules.single.displayAddress, 'View dep, ca phe on');
+      expect(
+        provider.schedules.single.mapsUrl,
+        'https://maps.app.goo.gl/abc123',
+      );
+    },
+  );
+
+  test(
     'updateSchedule rolls back visible state and notifications when sync fails',
     () async {
       final notificationGateway = _FakeNotificationGateway();
