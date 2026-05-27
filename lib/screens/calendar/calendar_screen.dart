@@ -215,7 +215,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           'date': _dateToApi(draft.date),
           'time': _timeRangeToApi(draft.start, draft.end),
           'status': scheduleStatusUpcoming,
-          'hasReminder': false,
+          'hasReminder': true,
         });
       }
       await scheduleProvider.fetchByDate(_selectedDate);
@@ -223,7 +223,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       SnackBarHelper.showSuccess(context, 'Đã thêm lịch trình nhanh');
     } catch (error) {
       if (!mounted) return;
-      SnackBarHelper.showError(context, error.toString());
+      SnackBarHelper.showError(context, _friendlyQuickScheduleError(error));
     }
   }
 
@@ -437,6 +437,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     (item) => _ScheduleCard(
                       schedule: item,
                       onTap: () => _showScheduleQuickView(item),
+                      onOpenMaps: () => _openScheduleMaps(context, item),
                     ),
                   ),
                 const SizedBox(height: 24),
@@ -540,13 +541,26 @@ class _DateTile extends StatelessWidget {
 }
 
 class _ScheduleCard extends StatelessWidget {
-  const _ScheduleCard({required this.schedule, required this.onTap});
+  const _ScheduleCard({
+    required this.schedule,
+    required this.onTap,
+    required this.onOpenMaps,
+  });
 
   final Schedule schedule;
   final VoidCallback onTap;
+  final VoidCallback onOpenMaps;
 
   @override
   Widget build(BuildContext context) {
+    if (schedule.isQuickSchedule) {
+      return _QuickScheduleCard(
+        schedule: schedule,
+        onTap: onTap,
+        onOpenMaps: onOpenMaps,
+      );
+    }
+
     return InkWell(
       borderRadius: BorderRadius.circular(20),
       onTap: onTap,
@@ -623,6 +637,98 @@ class _ScheduleCard extends StatelessWidget {
                   _StatusBadge(status: schedule.status),
                 ],
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickScheduleCard extends StatelessWidget {
+  const _QuickScheduleCard({
+    required this.schedule,
+    required this.onTap,
+    required this.onOpenMaps,
+  });
+
+  final Schedule schedule;
+  final VoidCallback onTap;
+  final VoidCallback onOpenMaps;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Theme.of(context).dividerColor),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Tên địa điểm:',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    schedule.displayPlaceName,
+                    style: AppTextStyles.title.copyWith(fontSize: 17),
+                  ),
+                ),
+                if (schedule.isPendingSync)
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else if (schedule.hasReminder)
+                  const Icon(
+                    Icons.notifications_active_rounded,
+                    color: AppColors.orange,
+                    size: 20,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Comment:',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    schedule.displayAddress,
+                    style: AppTextStyles.body,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  _displayScheduleTime(schedule),
+                  style: AppTextStyles.title.copyWith(fontSize: 15),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: schedule.isPendingSync ? null : onOpenMaps,
+              icon: const Icon(Icons.map_rounded, size: 18),
+              label: const Text('Maps'),
             ),
           ],
         ),
@@ -1082,7 +1188,7 @@ class _QuickScheduleSheetState extends State<_QuickScheduleSheet> {
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: SizedBox(
-                    width: 900,
+                    width: 1080,
                     child: ListView.separated(
                       itemCount: _rows.length + 1,
                       separatorBuilder: (context, index) =>
@@ -1091,6 +1197,7 @@ class _QuickScheduleSheetState extends State<_QuickScheduleSheet> {
                         if (index == 0) return const _QuickScheduleHeader();
                         final rowIndex = index - 1;
                         return _QuickScheduleRowEditor(
+                          rowIndex: rowIndex,
                           row: _rows[rowIndex],
                           canDelete: _rows.length > 1,
                           onChanged: () => setState(() {}),
@@ -1207,9 +1314,10 @@ class _QuickScheduleHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: const [
-        SizedBox(width: 220, child: _QuickScheduleHeaderCell('Ngày giờ')),
-        SizedBox(width: 300, child: _QuickScheduleHeaderCell('Địa điểm')),
-        SizedBox(width: 300, child: _QuickScheduleHeaderCell('Link map')),
+        SizedBox(width: 220, child: _QuickScheduleHeaderCell('Chỉnh ngày giờ')),
+        SizedBox(width: 240, child: _QuickScheduleHeaderCell('Tên địa điểm')),
+        SizedBox(width: 280, child: _QuickScheduleHeaderCell('Link Map')),
+        SizedBox(width: 240, child: _QuickScheduleHeaderCell('Comment')),
         SizedBox(width: 48),
       ],
     );
@@ -1235,12 +1343,14 @@ class _QuickScheduleHeaderCell extends StatelessWidget {
 
 class _QuickScheduleRowEditor extends StatelessWidget {
   const _QuickScheduleRowEditor({
+    required this.rowIndex,
     required this.row,
     required this.canDelete,
     required this.onChanged,
     required this.onDelete,
   });
 
+  final int rowIndex;
   final _QuickScheduleRow row;
   final bool canDelete;
   final VoidCallback onChanged;
@@ -1297,38 +1407,40 @@ class _QuickScheduleRowEditor extends StatelessWidget {
         ),
         const SizedBox(width: 12),
         SizedBox(
-          width: 300,
-          child: Column(
-            children: [
-              TextField(
-                controller: row.titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Tên địa điểm',
-                  prefixIcon: Icon(Icons.place_rounded),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: row.noteController,
-                minLines: 2,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Ghi chú, đánh giá, điều thú vị',
-                  prefixIcon: Icon(Icons.notes_rounded),
-                ),
-              ),
-            ],
+          width: 240,
+          child: TextField(
+            key: Key('quick-title-$rowIndex'),
+            controller: row.titleController,
+            decoration: const InputDecoration(
+              labelText: 'Tên địa điểm',
+              prefixIcon: Icon(Icons.place_rounded),
+            ),
           ),
         ),
         const SizedBox(width: 12),
         SizedBox(
-          width: 300,
+          width: 280,
           child: TextField(
+            key: Key('quick-maps-url-$rowIndex'),
             controller: row.mapsUrlController,
             keyboardType: TextInputType.url,
             decoration: const InputDecoration(
               labelText: 'Link Google Maps',
               prefixIcon: Icon(Icons.link_rounded),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        SizedBox(
+          width: 240,
+          child: TextField(
+            key: Key('quick-note-$rowIndex'),
+            controller: row.noteController,
+            minLines: 3,
+            maxLines: 4,
+            decoration: const InputDecoration(
+              labelText: 'Comment',
+              prefixIcon: Icon(Icons.notes_rounded),
             ),
           ),
         ),
@@ -1515,6 +1627,14 @@ String _statusActionSuccessMessage(String status) {
     scheduleStatusCancelled => 'Da huy lich trinh',
     _ => 'Da mo lai lich trinh',
   };
+}
+
+String _friendlyQuickScheduleError(Object error) {
+  final message = error.toString().toLowerCase();
+  if (message.contains('maps') || message.contains('url')) {
+    return 'Không thể lưu lịch nhanh. Hãy kiểm tra lại link Google Maps.';
+  }
+  return 'Không thể lưu lịch nhanh. Vui lòng thử lại.';
 }
 
 String _formatScheduleDate(DateTime date) {

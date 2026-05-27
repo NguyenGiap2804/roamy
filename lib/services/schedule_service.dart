@@ -103,8 +103,11 @@ class ScheduleService {
       severity: 'WARN',
       metadata: {
         'placeId': data['placeId'],
+        'title': data['title'],
+        'hasMapsUrl': (data['mapsUrl'] as String?)?.trim().isNotEmpty == true,
         'date': data['date'],
         'time': data['time'],
+        'statusCode': error is ApiException ? error.statusCode : null,
       },
     );
   }

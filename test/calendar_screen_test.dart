@@ -110,6 +110,95 @@ void main() {
     },
   );
 
+  testWidgets('calendar shows quick schedules as a compact map card', (
+    tester,
+  ) async {
+    final today = DateTime.now();
+    final provider = ScheduleProvider(
+      _FakeScheduleService(
+        schedules: [
+          _quickSchedule(date: DateTime(today.year, today.month, today.day)),
+        ],
+      ),
+      _FakeNotificationGateway(),
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: provider,
+        child: const MaterialApp(home: Scaffold(body: CalendarScreen())),
+      ),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tên địa điểm:'), findsOneWidget);
+    expect(find.text('AN cafe'), findsOneWidget);
+    expect(find.text('Comment:'), findsOneWidget);
+    expect(find.text('Cà phê ổn, view đẹp'), findsOneWidget);
+    expect(find.text('8 - 9h'), findsOneWidget);
+    expect(find.text('Maps'), findsOneWidget);
+    expect(find.byIcon(Icons.notifications_active_rounded), findsOneWidget);
+  });
+
+  testWidgets('quick schedule sheet submits rows with reminders enabled', (
+    tester,
+  ) async {
+    final today = DateTime.now();
+    final scheduleService = _FakeScheduleService(
+      createHandler: (data) async => _quickSchedule(
+        id: 'quick-created',
+        date: DateTime.parse(data['date'] as String),
+        title: data['title'] as String,
+        note: data['note'] as String,
+        mapsUrl: data['mapsUrl'] as String,
+        time: data['time'] as String,
+        hasReminder: data['hasReminder'] as bool,
+      ),
+    );
+    final provider = ScheduleProvider(
+      scheduleService,
+      _FakeNotificationGateway(),
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: provider,
+        child: const MaterialApp(home: Scaffold(body: CalendarScreen())),
+      ),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Thêm nhanh'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('quick-title-0')), 'AN cafe');
+    await tester.enterText(
+      find.byKey(const Key('quick-note-0')),
+      'Cà phê ổn, view đẹp',
+    );
+    await tester.enterText(
+      find.byKey(const Key('quick-maps-url-0')),
+      'https://maps.app.goo.gl/abc123',
+    );
+    await tester.tap(find.text('Lưu lịch trình'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(scheduleService.lastCreatePayload?['title'], 'AN cafe');
+    expect(
+      scheduleService.lastCreatePayload?['mapsUrl'],
+      'https://maps.app.goo.gl/abc123',
+    );
+    expect(scheduleService.lastCreatePayload?['hasReminder'], isTrue);
+    expect(provider.schedules.single.hasReminder, isTrue);
+    expect(provider.schedules.single.displayPlaceName, 'AN cafe');
+    expect(today, isNotNull);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('calendar quick edit updates reminder without leaving calendar', (
     tester,
   ) async {
@@ -170,13 +259,18 @@ void main() {
 }
 
 class _FakeScheduleService extends ScheduleService {
-  _FakeScheduleService({List<Schedule>? schedules, this.updateHandler})
-    : _schedules = schedules ?? const [],
-      super(ApiClient(baseUrl: 'https://example.com'));
+  _FakeScheduleService({
+    List<Schedule>? schedules,
+    this.createHandler,
+    this.updateHandler,
+  }) : _schedules = List<Schedule>.of(schedules ?? const []),
+       super(ApiClient(baseUrl: 'https://example.com'));
 
   final List<Schedule> _schedules;
+  final Future<Schedule> Function(Map<String, dynamic> data)? createHandler;
   final Future<Schedule> Function(String id, Map<String, dynamic> data)?
   updateHandler;
+  Map<String, dynamic>? lastCreatePayload;
   String? lastUpdatedId;
   Map<String, dynamic>? lastUpdatePayload;
 
@@ -190,6 +284,19 @@ class _FakeScheduleService extends ScheduleService {
           schedule.date.month == date.month &&
           schedule.date.day == date.day;
     }).toList();
+  }
+
+  @override
+  Future<Schedule> createSchedule(Map<String, dynamic> data) async {
+    lastCreatePayload = Map<String, dynamic>.from(data);
+    if (createHandler != null) {
+      final schedule = await createHandler!(data);
+      _schedules.add(schedule);
+      return schedule;
+    }
+    final schedule = _quickSchedule();
+    _schedules.add(schedule);
+    return schedule;
   }
 
   @override
@@ -250,6 +357,27 @@ Schedule _schedule({
     mapsUrl: 'https://www.google.com/maps/place/The+Cofftea',
     latitude: 21.02,
     longitude: 105.85,
+  );
+}
+
+Schedule _quickSchedule({
+  String id = 'quick-schedule-1',
+  DateTime? date,
+  String title = 'AN cafe',
+  String note = 'Cà phê ổn, view đẹp',
+  String mapsUrl = 'https://maps.app.goo.gl/abc123',
+  String time = '08:00-09:00',
+  bool hasReminder = true,
+}) {
+  return Schedule(
+    id: id,
+    date: date ?? DateTime(2099, 1, 10),
+    time: time,
+    status: scheduleStatusUpcoming,
+    hasReminder: hasReminder,
+    title: title,
+    note: note,
+    mapsUrl: mapsUrl,
   );
 }
 

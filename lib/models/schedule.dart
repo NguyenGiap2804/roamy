@@ -162,6 +162,9 @@ class Schedule {
       openingHours?.trim().isNotEmpty == true ? openingHours! : time;
   bool get hasMapsUrl => mapsUrl?.trim().isNotEmpty == true;
   bool get hasCoordinates => hasUsableCoordinates(latitude, longitude);
+  bool get isQuickSchedule =>
+      placeId?.trim().isNotEmpty != true &&
+      (title?.trim().isNotEmpty == true || note?.trim().isNotEmpty == true);
   bool get isUpcoming => status == scheduleStatusUpcoming;
   bool get isDone => status == scheduleStatusDone;
   bool get isCancelled => status == scheduleStatusCancelled;
