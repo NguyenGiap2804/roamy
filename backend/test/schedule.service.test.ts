@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { scheduleCreateSchema } from "../src/modules/schedule/schedule.model";
 import { ScheduleService } from "../src/modules/schedule/schedule.service";
 import { NotFoundError, ValidationError } from "../src/utils/errors";
 
@@ -31,6 +32,21 @@ test("create allows quick schedules without creating a place", async () => {
   assert.equal(schedule.title, quickInput.title);
   assert.equal(schedule.placeId, null);
   assert.equal(placeLookups, 0);
+});
+
+test("create schema treats an empty placeId as a quick schedule", () => {
+  const result = scheduleCreateSchema.safeParse({
+    body: {
+      ...quickInput,
+      placeId: "",
+    },
+  });
+
+  assert.equal(result.success, true);
+  if (!result.success) {
+    throw new Error(JSON.stringify(result.error.flatten()));
+  }
+  assert.equal(result.data.body.placeId, null);
 });
 
 test("create rejects quick schedules without title or Google Maps link", async () => {

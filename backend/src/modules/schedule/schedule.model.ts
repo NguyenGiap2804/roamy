@@ -8,9 +8,13 @@ const timeSchema = z
     /^([01]\d|2[0-3]):[0-5]\d(?:-([01]\d|2[0-3]):[0-5]\d)?$/,
     'time must use HH:mm or HH:mm-HH:mm format',
   );
+const optionalPlaceIdSchema = z.preprocess(
+  (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
+  z.uuid('placeId must be a valid UUID').optional().nullable(),
+);
 
 const scheduleFieldsSchema = z.object({
-  placeId: z.uuid('placeId must be a valid UUID').optional().nullable(),
+  placeId: optionalPlaceIdSchema,
   title: z.string().trim().optional().nullable(),
   note: z.string().trim().optional().nullable(),
   mapsUrl: z.url('mapsUrl must be a valid URL').optional().nullable(),
