@@ -178,6 +178,56 @@ void main() {
       expect(notificationGateway.scheduledIds, isNotEmpty);
     },
   );
+
+  test(
+    'updateSchedule keeps quick schedule title note maps link and date',
+    () async {
+      final notificationGateway = _FakeNotificationGateway();
+      final existing = _quickSchedule();
+      final scheduleService = _FakeScheduleService(
+        schedules: [existing],
+        updateHandler: (id, data) async {
+          return existing.copyWith(
+            title: data['title'] as String?,
+            note: data['note'] as String?,
+            mapsUrl: data['mapsUrl'] as String?,
+            date: DateTime.parse(data['date'] as String),
+            time: data['time'] as String?,
+            hasReminder: data['hasReminder'] as bool?,
+          );
+        },
+      );
+      final provider = ScheduleProvider(scheduleService, notificationGateway);
+
+      await provider.fetchSchedules();
+
+      await provider.updateSchedule(existing.id, {
+        'title': 'Bun cu ky',
+        'note': '2268 gieng don',
+        'mapsUrl': 'https://maps.app.goo.gl/changed',
+        'date': '2099-01-11',
+        'time': '08:00-09:00',
+        'hasReminder': true,
+      }, currentSchedule: existing);
+
+      expect(scheduleService.lastUpdatedId, existing.id);
+      expect(scheduleService.lastUpdatePayload, {
+        'title': 'Bun cu ky',
+        'note': '2268 gieng don',
+        'mapsUrl': 'https://maps.app.goo.gl/changed',
+        'date': '2099-01-11',
+        'time': '08:00-09:00',
+        'hasReminder': true,
+      });
+      expect(provider.schedules.single.displayPlaceName, 'Bun cu ky');
+      expect(provider.schedules.single.displayAddress, '2268 gieng don');
+      expect(
+        provider.schedules.single.mapsUrl,
+        'https://maps.app.goo.gl/changed',
+      );
+      expect(provider.schedules.single.date, DateTime(2099, 1, 11));
+    },
+  );
 }
 
 class _FakeScheduleService extends ScheduleService {
@@ -280,6 +330,27 @@ Schedule _schedule({
     mapsUrl: 'https://www.google.com/maps/place/The+Cofftea',
     latitude: 21.02,
     longitude: 105.85,
+  );
+}
+
+Schedule _quickSchedule({
+  String id = 'quick-schedule-1',
+  String title = 'AN cafe',
+  String note = 'Ca phe on, view dep',
+  String mapsUrl = 'https://maps.app.goo.gl/abc123',
+  DateTime? date,
+  String time = '10:00-11:30',
+  bool hasReminder = false,
+}) {
+  return Schedule(
+    id: id,
+    date: date ?? DateTime(2099, 1, 10),
+    time: time,
+    status: scheduleStatusUpcoming,
+    hasReminder: hasReminder,
+    title: title,
+    note: note,
+    mapsUrl: mapsUrl,
   );
 }
 

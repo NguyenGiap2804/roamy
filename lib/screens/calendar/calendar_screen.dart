@@ -137,6 +137,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
   ) async {
     Navigator.of(sheetContext).pop();
 
+    if (schedule.isQuickSchedule) {
+      await _openQuickScheduleEdit(schedule);
+      return;
+    }
+
     final result = await showModalBottomSheet<_ScheduleQuickEditResult>(
       context: context,
       isScrollControlled: true,
@@ -179,6 +184,59 @@ class _CalendarScreenState extends State<CalendarScreen> {
     } catch (error) {
       if (!mounted) return;
       SnackBarHelper.showError(context, error.toString());
+    }
+  }
+
+  Future<void> _openQuickScheduleEdit(Schedule schedule) async {
+    final result = await showModalBottomSheet<_QuickScheduleEditResult>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => _QuickScheduleEditSheet(schedule: schedule),
+    );
+
+    if (!mounted || result == null) return;
+
+    final payload = {
+      'title': result.title,
+      'note': result.note.isEmpty ? result.title : result.note,
+      'mapsUrl': result.mapsUrl,
+      'date': _dateToApi(result.date),
+      'time': _timeRangeToApi(result.start, result.end),
+      'hasReminder': result.hasReminder,
+    };
+
+    final nextNote = result.note.isEmpty ? result.title : result.note;
+    final hasChanged =
+        schedule.title != result.title ||
+        schedule.note != nextNote ||
+        schedule.mapsUrl != result.mapsUrl ||
+        !_sameDay(schedule.date, result.date) ||
+        schedule.time != payload['time'] ||
+        schedule.hasReminder != result.hasReminder;
+
+    if (!hasChanged) {
+      SnackBarHelper.showSuccess(context, 'Không có thay đổi');
+      return;
+    }
+
+    final scheduleProvider = context.read<ScheduleProvider>();
+    try {
+      await scheduleProvider.updateSchedule(
+        schedule.id,
+        payload,
+        currentSchedule: schedule,
+      );
+      await scheduleProvider.fetchByDate(_selectedDate);
+      if (!mounted) return;
+      SnackBarHelper.showSuccess(context, 'Đã cập nhật lịch trình nhanh');
+    } catch (error) {
+      if (!mounted) return;
+      SnackBarHelper.showError(context, _friendlyQuickScheduleError(error));
     }
   }
 
@@ -672,6 +730,15 @@ class _QuickScheduleCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (_relativeDayStatusLabel(schedule.date) != null) ...[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _RelativeDayBadge(
+                  label: _relativeDayStatusLabel(schedule.date)!,
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -846,7 +913,17 @@ class _ScheduleQuickView extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-            _StatusBadge(status: schedule.status),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _StatusBadge(status: schedule.status),
+                if (_relativeDayStatusLabel(schedule.date) != null)
+                  _RelativeDayBadge(
+                    label: _relativeDayStatusLabel(schedule.date)!,
+                  ),
+              ],
+            ),
             const SizedBox(height: 16),
             _QuickInfoRow(
               icon: Icons.event_rounded,
@@ -950,6 +1027,253 @@ class _ScheduleQuickEditResult {
   final TimeOfDay start;
   final TimeOfDay? end;
   final bool hasReminder;
+}
+
+class _QuickScheduleEditResult {
+  const _QuickScheduleEditResult({
+    required this.date,
+    required this.start,
+    required this.end,
+    required this.title,
+    required this.note,
+    required this.mapsUrl,
+    required this.hasReminder,
+  });
+
+  final DateTime date;
+  final TimeOfDay start;
+  final TimeOfDay end;
+  final String title;
+  final String note;
+  final String mapsUrl;
+  final bool hasReminder;
+}
+
+class _QuickScheduleEditSheet extends StatefulWidget {
+  const _QuickScheduleEditSheet({required this.schedule});
+
+  final Schedule schedule;
+
+  @override
+  State<_QuickScheduleEditSheet> createState() =>
+      _QuickScheduleEditSheetState();
+}
+
+class _QuickScheduleEditSheetState extends State<_QuickScheduleEditSheet> {
+  late DateTime _date = DateTime(
+    widget.schedule.date.year,
+    widget.schedule.date.month,
+    widget.schedule.date.day,
+  );
+  late TimeOfDay _start = _timeFromScheduleStart(widget.schedule);
+  late TimeOfDay _end =
+      _endTimeFromScheduleIfAny(widget.schedule) ??
+      _defaultQuickEditEndTime(_start);
+  late bool _hasReminder = widget.schedule.hasReminder;
+  late final TextEditingController _titleController = TextEditingController(
+    text: widget.schedule.title?.trim().isNotEmpty == true
+        ? widget.schedule.title!.trim()
+        : widget.schedule.displayPlaceName,
+  );
+  late final TextEditingController _noteController = TextEditingController(
+    text: widget.schedule.note?.trim() ?? '',
+  );
+  late final TextEditingController _mapsUrlController = TextEditingController(
+    text: widget.schedule.mapsUrl?.trim() ?? '',
+  );
+  String? _error;
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _noteController.dispose();
+    _mapsUrlController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final relativeLabel = _relativeDayStatusLabel(_date);
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.lg,
+        AppSpacing.xl,
+        MediaQuery.of(context).viewInsets.bottom +
+            MediaQuery.of(context).padding.bottom +
+            AppSpacing.xl,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Chỉnh lịch nhanh',
+              style: AppTextStyles.headline.copyWith(fontSize: 22),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _StatusBadge(status: widget.schedule.status),
+                if (relativeLabel != null)
+                  _RelativeDayBadge(label: relativeLabel),
+              ],
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _error!,
+                style: AppTextStyles.caption.copyWith(color: AppColors.red),
+              ),
+            ],
+            const SizedBox(height: 16),
+            _QuickPickerTile(
+              icon: Icons.event_rounded,
+              label: _formatScheduleDate(_date),
+              onTap: _pickDate,
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _QuickPickerTile(
+                    icon: Icons.schedule_rounded,
+                    label: _start.format(context),
+                    onTap: () => _pickTime(isStart: true),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _QuickPickerTile(
+                    icon: Icons.schedule_rounded,
+                    label: _end.format(context),
+                    onTap: () => _pickTime(isStart: false),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              key: const Key('quick-edit-title'),
+              controller: _titleController,
+              decoration: const InputDecoration(
+                labelText: 'Tên địa điểm',
+                prefixIcon: Icon(Icons.place_rounded),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              key: const Key('quick-edit-note'),
+              controller: _noteController,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Comment',
+                prefixIcon: Icon(Icons.notes_rounded),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              key: const Key('quick-edit-maps-url'),
+              controller: _mapsUrlController,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                labelText: 'Link Google Maps',
+                prefixIcon: Icon(Icons.link_rounded),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _hasReminder,
+              title: const Text('Nhac nho'),
+              subtitle: const Text('Thong bao truoc 30 phut va luc bat dau'),
+              onChanged: (value) => setState(() => _hasReminder = value),
+            ),
+            const SizedBox(height: 12),
+            PrimaryButton(
+              label: 'Luu thay doi',
+              icon: Icons.check_rounded,
+              onPressed: _submit,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: today.subtract(const Duration(days: 365)),
+      lastDate: today.add(const Duration(days: 730)),
+    );
+    if (picked == null) return;
+    setState(() {
+      _date = DateTime(picked.year, picked.month, picked.day);
+    });
+  }
+
+  Future<void> _pickTime({required bool isStart}) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: isStart ? _start : _end,
+    );
+    if (picked == null) return;
+
+    setState(() {
+      if (isStart) {
+        _start = picked;
+        if (!_isEndAfterStart(_start, _end)) {
+          _end = _defaultQuickEditEndTime(_start);
+        }
+      } else {
+        _end = picked;
+      }
+    });
+  }
+
+  void _submit() {
+    final title = _titleController.text.trim();
+    final note = _noteController.text.trim();
+    final mapsUrl = _mapsUrlController.text.trim();
+
+    if (title.isEmpty) {
+      _setError('Nhập tên địa điểm.');
+      return;
+    }
+    if (!_isEndAfterStart(_start, _end)) {
+      _setError('Giờ kết thúc phải sau giờ bắt đầu.');
+      return;
+    }
+    if (!_isValidMapUrl(mapsUrl)) {
+      _setError('Nhập link Google Maps hợp lệ.');
+      return;
+    }
+
+    Navigator.of(context).pop(
+      _QuickScheduleEditResult(
+        date: _date,
+        start: _start,
+        end: _end,
+        title: title,
+        note: note,
+        mapsUrl: mapsUrl,
+        hasReminder: _hasReminder,
+      ),
+    );
+  }
+
+  void _setError(String value) {
+    setState(() => _error = value);
+  }
 }
 
 class _ScheduleQuickEditSheet extends StatefulWidget {
@@ -1573,6 +1897,31 @@ class _QuickInfoRow extends StatelessWidget {
   }
 }
 
+class _RelativeDayBadge extends StatelessWidget {
+  const _RelativeDayBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppColors.primarySoft,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: AppColors.primaryDark,
+          fontWeight: FontWeight.w800,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+}
+
 class _StatusBadge extends StatelessWidget {
   const _StatusBadge({required this.status});
 
@@ -1612,6 +1961,20 @@ String _labelForStatus(String status) {
   };
 }
 
+String? _relativeDayStatusLabel(DateTime date, {DateTime? now}) {
+  final reference = now ?? DateTime.now();
+  final today = DateTime(reference.year, reference.month, reference.day);
+  final target = DateTime(date.year, date.month, date.day);
+  final diff = target.difference(today).inDays;
+
+  return switch (diff) {
+    -1 => 'Outday',
+    0 => 'Inday',
+    1 => 'Next day',
+    _ => null,
+  };
+}
+
 String _labelForFilter(_ScheduleStatusFilter filter) {
   return switch (filter) {
     _ScheduleStatusFilter.all => 'Tat ca',
@@ -1635,6 +1998,15 @@ String _friendlyQuickScheduleError(Object error) {
     return 'Không thể lưu lịch nhanh. Hãy kiểm tra lại link Google Maps.';
   }
   return 'Không thể lưu lịch nhanh. Vui lòng thử lại.';
+}
+
+bool _isValidMapUrl(String value) {
+  final uri = Uri.tryParse(value);
+  if (uri == null || !uri.hasScheme || uri.host.isEmpty) return false;
+  if (uri.scheme != 'http' && uri.scheme != 'https') return false;
+  return uri.host.contains('google.') ||
+      uri.host.contains('goo.gl') ||
+      uri.host.contains('maps.app.goo.gl');
 }
 
 String _formatScheduleDate(DateTime date) {

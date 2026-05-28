@@ -256,6 +256,133 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
   });
+
+  testWidgets('calendar quick edit updates quick schedule details', (
+    tester,
+  ) async {
+    final today = DateTime.now();
+    final scheduleService = _FakeScheduleService(
+      schedules: [
+        _quickSchedule(date: DateTime(today.year, today.month, today.day)),
+      ],
+      updateHandler: (id, data) async {
+        return _patchedSchedule(
+          _quickSchedule(
+            id: id,
+            date: DateTime(today.year, today.month, today.day),
+          ),
+          data,
+        );
+      },
+    );
+    final provider = ScheduleProvider(
+      scheduleService,
+      _FakeNotificationGateway(),
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: provider,
+        child: const MaterialApp(home: Scaffold(body: CalendarScreen())),
+      ),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('AN cafe'));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Chinh nhanh'));
+    await tester.tap(find.text('Chinh nhanh'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('quick-edit-title')),
+      'Bun cu ky',
+    );
+    await tester.enterText(
+      find.byKey(const Key('quick-edit-note')),
+      '2268 gieng don',
+    );
+    await tester.enterText(
+      find.byKey(const Key('quick-edit-maps-url')),
+      'https://maps.app.goo.gl/changed',
+    );
+
+    await tester.tap(find.text('Nhac nho'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Luu thay doi'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(scheduleService.lastUpdatedId, 'quick-schedule-1');
+    expect(scheduleService.lastUpdatePayload, {
+      'title': 'Bun cu ky',
+      'note': '2268 gieng don',
+      'mapsUrl': 'https://maps.app.goo.gl/changed',
+      'date': _dateToApi(DateTime(today.year, today.month, today.day)),
+      'time': '08:00-09:00',
+      'hasReminder': false,
+    });
+    expect(provider.schedules.single.displayPlaceName, 'Bun cu ky');
+    expect(provider.schedules.single.displayAddress, '2268 gieng don');
+    expect(
+      provider.schedules.single.mapsUrl,
+      'https://maps.app.goo.gl/changed',
+    );
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('quick schedule cards show relative day status badges', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final provider = ScheduleProvider(
+      _FakeScheduleService(
+        returnAllForDate: true,
+        schedules: [
+          _quickSchedule(
+            id: 'quick-yesterday',
+            title: 'Yesterday quick',
+            date: today.subtract(const Duration(days: 1)),
+          ),
+          _quickSchedule(id: 'quick-today', title: 'Today quick', date: today),
+          _quickSchedule(
+            id: 'quick-tomorrow',
+            title: 'Tomorrow quick',
+            date: today.add(const Duration(days: 1)),
+          ),
+          _quickSchedule(
+            id: 'quick-later',
+            title: 'Later quick',
+            date: today.add(const Duration(days: 2)),
+          ),
+        ],
+      ),
+      _FakeNotificationGateway(),
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: provider,
+        child: const MaterialApp(home: Scaffold(body: CalendarScreen())),
+      ),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Outday'), findsOneWidget);
+    expect(find.text('Inday'), findsOneWidget);
+    expect(find.text('Next day'), findsOneWidget);
+    expect(find.text('Later quick'), findsOneWidget);
+  });
 }
 
 class _FakeScheduleService extends ScheduleService {
@@ -263,6 +390,7 @@ class _FakeScheduleService extends ScheduleService {
     List<Schedule>? schedules,
     this.createHandler,
     this.updateHandler,
+    this.returnAllForDate = false,
   }) : _schedules = List<Schedule>.of(schedules ?? const []),
        super(ApiClient(baseUrl: 'https://example.com'));
 
@@ -270,6 +398,7 @@ class _FakeScheduleService extends ScheduleService {
   final Future<Schedule> Function(Map<String, dynamic> data)? createHandler;
   final Future<Schedule> Function(String id, Map<String, dynamic> data)?
   updateHandler;
+  final bool returnAllForDate;
   Map<String, dynamic>? lastCreatePayload;
   String? lastUpdatedId;
   Map<String, dynamic>? lastUpdatePayload;
@@ -279,6 +408,7 @@ class _FakeScheduleService extends ScheduleService {
 
   @override
   Future<List<Schedule>> getSchedulesByDate(DateTime date) async {
+    if (returnAllForDate) return _schedules;
     return _schedules.where((schedule) {
       return schedule.date.year == date.year &&
           schedule.date.month == date.month &&
@@ -304,7 +434,14 @@ class _FakeScheduleService extends ScheduleService {
     lastUpdatedId = id;
     lastUpdatePayload = Map<String, dynamic>.from(data);
     if (updateHandler != null) {
-      return updateHandler!(id, data);
+      final schedule = await updateHandler!(id, data);
+      final index = _schedules.indexWhere((item) => item.id == id);
+      if (index == -1) {
+        _schedules.add(schedule);
+      } else {
+        _schedules[index] = schedule;
+      }
+      return schedule;
     }
     return _schedule(id: id);
   }
@@ -383,8 +520,20 @@ Schedule _quickSchedule({
 
 Schedule _patchedSchedule(Schedule schedule, Map<String, dynamic> data) {
   return schedule.copyWith(
+    title: data['title'] as String? ?? schedule.title,
+    note: data['note'] as String? ?? schedule.note,
+    mapsUrl: data['mapsUrl'] as String? ?? schedule.mapsUrl,
+    date: data['date'] is String
+        ? DateTime.parse(data['date'] as String)
+        : schedule.date,
     time: data['time'] as String? ?? schedule.time,
     hasReminder: data['hasReminder'] as bool? ?? schedule.hasReminder,
     status: data['status'] as String? ?? schedule.status,
   );
+}
+
+String _dateToApi(DateTime date) {
+  final month = date.month.toString().padLeft(2, '0');
+  final day = date.day.toString().padLeft(2, '0');
+  return '${date.year}-$month-$day';
 }
